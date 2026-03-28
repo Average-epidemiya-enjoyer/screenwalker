@@ -123,6 +123,49 @@ steps:
     action: hotkey
     keys: ["alt", "F4"]
 
+# ── Screen fingerprints ───────────────────────────────────────────────────────
+# Used by ScreenStateDetector / ScreenStateAnalyzer to identify logical screens.
+
+screens:
+
+  notepad_main:
+    required_texts:
+      - "Notepad"
+    forbidden_texts:
+      - "Save As"
+      - "Error"
+    optional_texts:
+      - "File"
+      - "Edit"
+      - "View"
+      - "Help"
+    required_templates: []
+    match_threshold: 0.65
+
+  save_as_dialog:
+    required_texts:
+      - "Save As"
+    forbidden_texts: []
+    optional_texts:
+      - "File name"
+      - "Save as type"
+      - "Save"
+      - "Cancel"
+    required_templates: []
+    match_threshold: 0.70
+
+  error_dialog:
+    required_texts:
+      - "Error"
+    forbidden_texts:
+      - "Save As"
+    optional_texts:
+      - "OK"
+      - "Close"
+      - "Cancel"
+    required_templates: []
+    match_threshold: 0.60
+
 # ── Teardown (runs even if steps fail) ────────────────────────────────────────
 teardown:
   - id: cleanup_screenshot
