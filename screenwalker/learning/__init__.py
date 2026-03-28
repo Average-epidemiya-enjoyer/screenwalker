@@ -1,7 +1,16 @@
-"""Learning system — step logger, action cache, and pattern updater."""
+"""Learning system — step logger, action cache, and pattern analyser."""
 
-from screenwalker.learning.cache import ActionCache
-from screenwalker.learning.logger import StepLogger
-from screenwalker.learning.patterns import PatternLearner
+from screenwalker.learning.cache import ActionCache, CacheEntry
+from screenwalker.learning.logger import StepLogger, StepResult
+from screenwalker.learning.patterns import LearningReport, OcrMismatch, PatternLearner, StepStats
 
-__all__ = ["ActionCache", "StepLogger", "PatternLearner"]
+__all__ = [
+    "ActionCache",
+    "CacheEntry",
+    "LearningReport",
+    "OcrMismatch",
+    "PatternLearner",
+    "StepLogger",
+    "StepResult",
+    "StepStats",
+]

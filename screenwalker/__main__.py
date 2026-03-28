@@ -208,6 +208,90 @@ def capture_template(
     click.echo(f"Template saved: {out_path}  ({w}x{h} px at {x},{y})")
 
 
+@main.command("analyze")
+@click.argument("log_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--log-level",
+    type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
+    default="warning",
+    show_default=True,
+)
+def analyze(log_dir: Path, log_level: str) -> None:
+    """Analyse execution logs in LOG_DIR and print a learning report.
+
+    Reads all steps.jsonl files found under LOG_DIR, aggregates step
+    statistics, detects OCR mismatches, and suggests timeout optimisations.
+
+    Example:
+
+        python -m screenwalker analyze logs/
+    """
+    _configure_logging(log_level)
+
+    from screenwalker.learning.patterns import PatternLearner
+    from screenwalker.matching.synonyms import SynonymRegistry
+
+    registry = SynonymRegistry(load_defaults=True)
+    learner = PatternLearner(registry=registry)
+    report = learner.analyze_logs(log_dir)
+    click.echo(report.format_text())
+
+
+@main.command("suggest-synonyms")
+@click.argument("log_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--min-count",
+    "-n",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Minimum observation count to include a candidate.",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
+    default="warning",
+    show_default=True,
+)
+def suggest_synonyms(log_dir: Path, min_count: int, log_level: str) -> None:
+    """Suggest new synonym entries based on OCR mismatches in LOG_DIR.
+
+    Analyses steps.jsonl files and prints pairs where the OCR reading
+    differed from the expected text — these are candidates for the
+    config/synonyms.yaml dictionary.
+
+    Example:
+
+        python -m screenwalker suggest-synonyms logs/
+    """
+    _configure_logging(log_level)
+
+    from screenwalker.learning.patterns import PatternLearner
+    from screenwalker.matching.synonyms import SynonymRegistry
+
+    registry = SynonymRegistry(load_defaults=True)
+    learner = PatternLearner(registry=registry, min_observations=min_count)
+    report = learner.analyze_logs(log_dir)
+
+    suggestions = learner.suggest_synonyms()
+    if not suggestions:
+        click.echo("No synonym suggestions found.")
+        return
+
+    click.echo("=== Synonym Suggestions ===")
+    click.echo(
+        "Add these to config/synonyms.yaml under the relevant group:\n"
+    )
+    for label, candidates in sorted(suggestions.items()):
+        mismatches = [
+            m for m in report.ocr_mismatches if m.find_target.lower() == label
+        ]
+        for cand in candidates:
+            count = next((m.count for m in mismatches if m.found_text == cand), 1)
+            if count >= min_count:
+                click.echo(f"  [{label}]  +  '{cand}'  ({count} observation(s))")
+
+
 def _parse_var_overrides(var: tuple[str, ...]) -> dict[str, str]:
     """Parse ``KEY=VALUE`` pairs from --var options.
 
