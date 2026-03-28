@@ -94,6 +94,7 @@ class ScenarioEngine:
         clipboard: Any = None,
         cache: ActionCache | None = None,
         step_logger: StepLogger | None = None,
+        detector: Any = None,
     ) -> None:
         """Initialize ScenarioEngine with all subsystems.
 
@@ -112,6 +113,7 @@ class ScenarioEngine:
             clipboard: Override :class:`~screenwalker.actions.clipboard.ClipboardManager`.
             cache: Override :class:`~screenwalker.learning.cache.ActionCache`.
             step_logger: Override :class:`~screenwalker.learning.logger.StepLogger`.
+            detector: Override YOLO detector (UIElementDetector or compatible).
         """
         self.scenario_name = scenario_name
         self.steps = steps
@@ -125,6 +127,7 @@ class ScenarioEngine:
         self._ocr = ocr_engine  # lazily set to None; callers inject for non-dry runs
         self._matcher = template_matcher
         self._screen_analyzer = screen_analyzer
+        self._detector = detector  # YOLO detector; None → no YOLO fallback
 
         # ── Action subsystems ────────────────────────────────────────────────
         self._mouse = mouse or self._build_mouse(config)
@@ -253,6 +256,14 @@ class ScenarioEngine:
                 )
             except ImportError:
                 logger.warning("Tesseract not available — OCR steps will fail")
+
+        # Load YOLO detector if enabled
+        if getattr(resolved_config.vision, "yolo_enabled", False):
+            try:
+                from screenwalker.vision.detector import create_detector
+                engine._detector = create_detector(resolved_config.vision)
+            except Exception as exc:
+                logger.warning("YOLO detector init failed", error=str(exc))
 
         # Load template matcher if templates directory exists
         templates_dir = path.parent / "templates"
@@ -548,6 +559,14 @@ class ScenarioEngine:
             if result is None and step.fallback is not None:
                 result = self._find_by_spec(image, step.fallback, step.id)
 
+            # 4. YOLO fallback — try detector if OCR and template both failed
+            if result is None and self._detector is not None and getattr(self._detector, "available", False):
+                if step.find.method != FindMethod.YOLO:
+                    yolo_region = _build_region(step.find.region)
+                    result = self._detector.find(image, step.find.query, region=yolo_region)
+                    if result is not None:
+                        log.debug("Element found via YOLO fallback")
+
             if result is not None:
                 # Store in cache for future steps
                 if screen_id:
@@ -619,10 +638,17 @@ class ScenarioEngine:
             )
 
         if spec.method == FindMethod.YOLO:
-            self._log.warning(
-                "YOLO finder is not yet implemented", step_id=step_id
+            if self._detector is None or not getattr(self._detector, "available", False):
+                self._log.warning(
+                    "YOLO detector not configured or unavailable", step_id=step_id
+                )
+                return None
+            return self._detector.find(
+                image,
+                spec.query,
+                threshold=spec.threshold,
+                region=region,
             )
-            return None
 
         return None
 

@@ -4,6 +4,7 @@ All public finders implement the :class:`Finder` Protocol and return a
 :class:`FindResult` so the engine can treat them interchangeably.
 """
 
+from screenwalker.vision.detector import DetectionResult
 from screenwalker.vision.screen_state import FindResult
 
-__all__ = ["FindResult"]
+__all__ = ["FindResult", "DetectionResult"]
