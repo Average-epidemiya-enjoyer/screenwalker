@@ -39,6 +39,11 @@ actions:
   mouse_move_duration: 0.2  # seconds for smooth mouse movement (0 = instant)
   typing_interval: 0.03     # seconds between keystrokes
   double_click_interval: 0.1
+  humanize: true            # add random jitter to make actions less robotic
+  humanize_offset_px: 2     # ± pixel offset applied to every click/move coordinate
+  humanize_delay_min_ms: 50 # minimum random pre-action delay
+  humanize_delay_max_ms: 150 # maximum random pre-action delay
+  clipboard_settle_delay: 0.2 # seconds to wait after Ctrl+C before reading clipboard
 
 logging:
   level: info               # debug | info | warning | error

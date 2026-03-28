@@ -97,11 +97,21 @@ class ActionsConfig(BaseModel):
         mouse_move_duration: Smooth mouse movement duration in seconds.
         typing_interval: Seconds between keystrokes.
         double_click_interval: Seconds between double-click presses.
+        humanize: Add random jitter to coordinates and pre-action delays.
+        humanize_offset_px: Maximum random pixel offset (±) applied to coordinates.
+        humanize_delay_min_ms: Minimum random pre-action delay in milliseconds.
+        humanize_delay_max_ms: Maximum random pre-action delay in milliseconds.
+        clipboard_settle_delay: Seconds to wait after Ctrl+C before reading clipboard.
     """
 
     mouse_move_duration: float = 0.2
     typing_interval: float = 0.03
     double_click_interval: float = 0.1
+    humanize: bool = True
+    humanize_offset_px: int = 2
+    humanize_delay_min_ms: int = 50
+    humanize_delay_max_ms: int = 150
+    clipboard_settle_delay: float = 0.2
 
 
 class LoggingConfig(BaseModel):
