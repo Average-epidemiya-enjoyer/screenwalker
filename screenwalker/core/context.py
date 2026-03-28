@@ -152,8 +152,11 @@ class RunContext:
         Returns:
             Absolute path of the saved file.
         """
-        # TODO: ensure output_dir exists, save image, return path
-        raise NotImplementedError("TODO: implement screenshot persistence")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        safe = label.replace(" ", "_").replace("/", "-").replace("\\", "-")
+        path = self.output_dir / f"{safe}.png"
+        image.save(path, "PNG")
+        return path.resolve()
 
     def update_screenshot(self, image: Image.Image) -> None:
         """Update the cached last screenshot.

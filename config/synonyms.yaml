@@ -1,0 +1,441 @@
+# ScreenWalker — UI Synonym Dictionary
+# Covers common UI elements across Russian/English interfaces.
+# Used by SynonymDictionary for fuzzy element resolution.
+#
+# Format:
+#   synonyms:
+#     <group_name>:
+#       - alias1
+#       - alias2
+#
+# Group names are canonical identifiers; aliases include all known surface forms.
+
+synonyms:
+
+  # ── Confirmation / positive actions ───────────────────────────────────────
+  ok:
+    - ok
+    - ок
+    - okay
+    - yes
+    - да
+    - confirm
+    - подтвердить
+    - apply
+    - применить
+    - accept
+    - принять
+    - sure
+    - конечно
+    - agree
+    - согласен
+
+  # ── Dismissal / negative actions ──────────────────────────────────────────
+  cancel:
+    - cancel
+    - отмена
+    - отменить
+    - no
+    - нет
+    - dismiss
+    - закрыть
+    - close
+    - закрить
+    - abort
+    - прервать
+    - decline
+    - отклонить
+    - reject
+    - отказ
+    - "×"
+    - "✕"
+    - X
+
+  # ── Save / persist ─────────────────────────────────────────────────────────
+  save:
+    - save
+    - сохранить
+    - save file
+    - save as
+    - сохранить как
+    - write
+    - записать
+    - export
+    - экспорт
+    - apply changes
+    - применить изменения
+
+  # ── Open / load ────────────────────────────────────────────────────────────
+  open:
+    - open
+    - открыть
+    - load
+    - загрузить
+    - import
+    - импорт
+    - browse
+    - обзор
+    - choose file
+    - выбрать файл
+    - select file
+    - выбрать
+
+  # ── Navigation — forward ───────────────────────────────────────────────────
+  next:
+    - next
+    - далее
+    - continue
+    - продолжить
+    - proceed
+    - forward
+    - вперёд
+    - ">"
+    - ">>"
+    - "→"
+    - advance
+    - следующий
+
+  # ── Navigation — backward ─────────────────────────────────────────────────
+  back:
+    - back
+    - назад
+    - previous
+    - предыдущий
+    - prev
+    - "<"
+    - "<<"
+    - "←"
+    - go back
+    - вернуться
+
+  # ── Completion ─────────────────────────────────────────────────────────────
+  finish:
+    - finish
+    - завершить
+    - done
+    - готово
+    - complete
+    - завершено
+    - submit
+    - отправить
+    - ready
+    - готов
+
+  # ── Search ─────────────────────────────────────────────────────────────────
+  search:
+    - search
+    - поиск
+    - find
+    - найти
+    - lookup
+    - query
+    - запрос
+    - filter
+    - фильтр
+    - "🔍"
+    - искать
+
+  # ── Delete / remove ────────────────────────────────────────────────────────
+  delete:
+    - delete
+    - удалить
+    - remove
+    - убрать
+    - erase
+    - стереть
+    - clear
+    - очистить
+    - discard
+    - отбросить
+    - trash
+    - корзина
+    - "🗑"
+
+  # ── Edit / modify ──────────────────────────────────────────────────────────
+  edit:
+    - edit
+    - редактировать
+    - modify
+    - изменить
+    - change
+    - поменять
+    - update
+    - обновить
+    - rename
+    - переименовать
+    - pencil
+    - карандаш
+    - "✏"
+
+  # ── Create / add ───────────────────────────────────────────────────────────
+  new:
+    - new
+    - новый
+    - create
+    - создать
+    - add
+    - добавить
+    - insert
+    - вставить
+    - "+"
+    - new file
+    - новый файл
+
+  # ── Settings / configuration ───────────────────────────────────────────────
+  settings:
+    - settings
+    - настройки
+    - preferences
+    - предпочтения
+    - options
+    - параметры
+    - configuration
+    - конфигурация
+    - config
+    - properties
+    - свойства
+    - "⚙"
+    - "⚙️"
+
+  # ── Help / documentation ───────────────────────────────────────────────────
+  help:
+    - help
+    - помощь
+    - "?"
+    - support
+    - поддержка
+    - documentation
+    - документация
+    - about
+    - о программе
+    - info
+    - информация
+    - "ℹ"
+
+  # ── Home / dashboard ──────────────────────────────────────────────────────
+  home:
+    - home
+    - главная
+    - start
+    - старт
+    - main
+    - главное
+    - dashboard
+    - рабочий стол
+    - overview
+    - обзор
+    - "🏠"
+
+  # ── Logout / sign out ─────────────────────────────────────────────────────
+  logout:
+    - logout
+    - выход
+    - log out
+    - sign out
+    - signout
+    - exit
+    - выйти
+    - quit
+    - покинуть
+    - "🚪"
+
+  # ── Login / sign in ───────────────────────────────────────────────────────
+  login:
+    - login
+    - вход
+    - log in
+    - sign in
+    - signin
+    - authenticate
+    - авторизация
+    - enter
+    - войти
+    - "🔑"
+
+  # ── Upload / send ─────────────────────────────────────────────────────────
+  upload:
+    - upload
+    - загрузить
+    - send
+    - отправить
+    - post
+    - опубликовать
+    - attach
+    - прикрепить
+    - "📤"
+    - "⬆"
+
+  # ── Download / receive ────────────────────────────────────────────────────
+  download:
+    - download
+    - скачать
+    - receive
+    - получить
+    - "📥"
+    - "⬇"
+    - get
+    - получить файл
+
+  # ── Refresh / reload ──────────────────────────────────────────────────────
+  refresh:
+    - refresh
+    - обновить
+    - reload
+    - перезагрузить
+    - retry
+    - повторить
+    - "🔄"
+    - "↻"
+    - sync
+    - синхронизировать
+
+  # ── Copy / duplicate ──────────────────────────────────────────────────────
+  copy:
+    - copy
+    - копировать
+    - duplicate
+    - дублировать
+    - clone
+    - клонировать
+    - "📋"
+
+  # ── Paste / insert ────────────────────────────────────────────────────────
+  paste:
+    - paste
+    - вставить
+    - insert
+    - вставка
+
+  # ── Print ──────────────────────────────────────────────────────────────────
+  print:
+    - print
+    - печать
+    - печатать
+    - "🖨"
+    - print document
+
+  # ── Share ──────────────────────────────────────────────────────────────────
+  share:
+    - share
+    - поделиться
+    - "📤"
+    - send to
+    - отправить кому
+    - forward to
+
+  # ── Notifications ──────────────────────────────────────────────────────────
+  notifications:
+    - notifications
+    - уведомления
+    - alerts
+    - оповещения
+    - "🔔"
+    - messages
+    - сообщения
+
+  # ── Profile / account ─────────────────────────────────────────────────────
+  profile:
+    - profile
+    - профиль
+    - account
+    - аккаунт
+    - user
+    - пользователь
+    - "👤"
+    - my account
+    - мой аккаунт
+
+  # ── Menu / navigation menu ────────────────────────────────────────────────
+  menu:
+    - menu
+    - меню
+    - "☰"
+    - navigation
+    - навигация
+    - burger
+    - hamburger
+    - sidebar
+
+  # ── Error / failure status ────────────────────────────────────────────────
+  error:
+    - error
+    - ошибка
+    - failed
+    - ошибка выполнения
+    - failure
+    - сбой
+    - "✗"
+    - "❌"
+    - problem
+    - проблема
+
+  # ── Success / OK status ───────────────────────────────────────────────────
+  success:
+    - success
+    - успех
+    - successful
+    - успешно
+    - "✓"
+    - "✔"
+    - "✅"
+    - completed
+    - выполнено
+    - done
+
+  # ── Warning ───────────────────────────────────────────────────────────────
+  warning:
+    - warning
+    - предупреждение
+    - caution
+    - осторожно
+    - attention
+    - внимание
+    - "⚠"
+    - "⚠️"
+    - alert
+    - важно
+
+  # ── Loading / please wait ─────────────────────────────────────────────────
+  loading:
+    - loading
+    - загрузка
+    - please wait
+    - пожалуйста подождите
+    - подождите
+    - processing
+    - обработка
+    - "..."
+    - "…"
+    - in progress
+    - выполняется
+
+  # ── File name field (Save dialog) ─────────────────────────────────────────
+  filename_field:
+    - file name
+    - имя файла
+    - filename
+    - name
+    - название
+    - file
+    - файл
+
+  # ── Save As dialog ────────────────────────────────────────────────────────
+  save_as:
+    - save as
+    - сохранить как
+    - save file as
+    - export as
+    - экспортировать как
+    - "save a copy"
+    - сохранить копию
+
+  # ── Window close button ───────────────────────────────────────────────────
+  window_close:
+    - close window
+    - закрыть окно
+    - close tab
+    - закрыть вкладку
+    - "✕"
+    - "×"
+    - X
+    - закрыть

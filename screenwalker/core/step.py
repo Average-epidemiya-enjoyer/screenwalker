@@ -45,6 +45,7 @@ class OnFailure(str, Enum):
     ABORT = "abort"      # Stop the scenario immediately (default)
     SKIP = "skip"        # Log the failure and continue to the next step
     CONTINUE = "continue"  # Alias for skip; kept for readability in YAML
+    RETRY = "retry"      # Retry the step up to Step.retries times
 
 
 class FindSpec(BaseModel):
@@ -115,6 +116,9 @@ class Step(BaseModel):
     on_failure: OnFailure = OnFailure.ABORT
     clear_first: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
+    expect_screen: str | None = None
+    next_step: str | None = None
+    retries: int = Field(default=3, ge=0)
 
     model_config = {"extra": "allow"}
 

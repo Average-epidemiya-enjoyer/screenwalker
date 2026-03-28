@@ -140,5 +140,5 @@ class StepLogger:
         slug = step_id.replace(" ", "_").replace("/", "-")
         filename = f"{self._step_index:03d}_{prefix}_{slug}.png"
         dest = self.output_dir / "screenshots" / filename
-        # TODO: call save_image(image, dest)
-        raise NotImplementedError("TODO: implement _save_step_screenshot")
+        from screenwalker.vision.capture import save_image
+        return save_image(image, dest)

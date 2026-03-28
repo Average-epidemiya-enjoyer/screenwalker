@@ -1,8 +1,13 @@
 """Synonym / alias dictionary for UI element labels.
 
-Many UI frameworks label the same concept differently across locales, themes,
-or application versions.  The :class:`SynonymRegistry` maps canonical names
-to sets of known aliases so the OCR finder can match any of them.
+Two complementary classes are provided:
+
+* :class:`SynonymRegistry` — the original registry with canonical → alias
+  resolution.  Used throughout the vision pipeline.
+
+* :class:`SynonymDictionary` — higher-level class designed for YAML-driven
+  configuration.  Wraps a ``SynonymRegistry`` and adds fuzzy group resolution,
+  online synonym addition, and round-trip YAML persistence.
 
 Example:
     >>> reg = SynonymRegistry()
@@ -11,16 +16,26 @@ Example:
     'ok'
     >>> reg.expand("ok")
     {'ok', 'okay', 'yes', 'confirm', 'apply'}
+
+    >>> d = SynonymDictionary()
+    >>> d.resolve("Confirm")
+    ['accept', 'apply', 'confirm', 'ok', 'okay', 'sure', 'yes']
+    >>> d.find_group("закрыть")
+    'cancel'
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 
+# ---------------------------------------------------------------------------
 # Built-in synonym groups covering common UI patterns
+# ---------------------------------------------------------------------------
+
 _DEFAULT_SYNONYMS: dict[str, list[str]] = {
     "ok": ["ok", "okay", "yes", "confirm", "apply", "accept", "sure"],
     "cancel": ["cancel", "no", "dismiss", "close", "abort", "decline"],
@@ -39,6 +54,11 @@ _DEFAULT_SYNONYMS: dict[str, list[str]] = {
     "logout": ["logout", "log out", "sign out", "signout", "exit"],
     "login": ["login", "log in", "sign in", "signin", "authenticate"],
 }
+
+
+# ---------------------------------------------------------------------------
+# SynonymRegistry — original low-level registry
+# ---------------------------------------------------------------------------
 
 
 class SynonymRegistry:
@@ -160,3 +180,175 @@ class SynonymRegistry:
         data = {k: sorted(v) for k, v in self._canonical_to_aliases.items()}
         with path.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(data, fh, allow_unicode=True, default_flow_style=False)
+
+
+# ---------------------------------------------------------------------------
+# SynonymDictionary — higher-level YAML-first API
+# ---------------------------------------------------------------------------
+
+
+class SynonymDictionary:
+    """YAML-driven synonym dictionary with fuzzy group resolution.
+
+    Wraps a :class:`SynonymRegistry` and adds:
+
+    * :meth:`resolve` — returns the full list of synonyms for *text*.
+    * :meth:`find_group` — fuzzy-matches *text* to the closest synonym group.
+    * :meth:`add_synonym` — adds a new alias at runtime (useful for learning).
+    * :meth:`save` — persists changes back to the source YAML file.
+
+    YAML format (``synonyms:`` top-level key)::
+
+        synonyms:
+          close:
+            - закрыть
+            - close
+            - cancel
+            - ×
+          save:
+            - сохранить
+            - save
+            - apply
+
+    The ``synonyms:`` wrapper key is optional — a bare mapping is also accepted
+    (compatible with :meth:`SynonymRegistry.load_from_yaml`).
+
+    Args:
+        dict_path: Path to a YAML synonyms file.  When ``None`` the dictionary
+            starts empty.
+    """
+
+    def __init__(self, dict_path: Path | str | None = None) -> None:
+        """Initialize SynonymDictionary.
+
+        Args:
+            dict_path: Optional path to a YAML synonyms file to load.
+        """
+        self._registry = SynonymRegistry(load_defaults=False)
+        self._dict_path: Path | None = Path(dict_path) if dict_path else None
+        if self._dict_path is not None and self._dict_path.exists():
+            self._load(self._dict_path)
+
+    # ------------------------------------------------------------------
+    # Loading / saving
+    # ------------------------------------------------------------------
+
+    def _load(self, path: Path) -> None:
+        """Load synonyms from *path*, supporting both YAML formats.
+
+        Args:
+            path: YAML file to read.
+        """
+        with path.open("r", encoding="utf-8") as fh:
+            raw: Any = yaml.safe_load(fh)
+
+        if not isinstance(raw, dict):
+            raise ValueError(f"Synonyms YAML must be a top-level mapping: {path}")
+
+        # Support `synonyms:` wrapper key
+        if "synonyms" in raw and isinstance(raw["synonyms"], dict):
+            groups = raw["synonyms"]
+        else:
+            groups = raw
+
+        for group_name, aliases in groups.items():
+            if isinstance(aliases, list):
+                self._registry.add_group(str(group_name), [str(a) for a in aliases])
+
+    def save(self) -> None:
+        """Persist the current dictionary to :attr:`dict_path`.
+
+        Raises:
+            RuntimeError: If no *dict_path* was provided at construction time.
+        """
+        if self._dict_path is None:
+            raise RuntimeError("No dict_path set — provide a path to save to")
+        self._dict_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "synonyms": {
+                k: sorted(v)
+                for k, v in self._registry._canonical_to_aliases.items()
+            }
+        }
+        with self._dict_path.open("w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, allow_unicode=True, default_flow_style=False)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def resolve(self, text: str) -> list[str]:
+        """Return all known synonyms for *text*, sorted alphabetically.
+
+        If *text* belongs to a synonym group, the entire group is returned.
+        Otherwise ``[text.lower().strip()]`` is returned (singleton).
+
+        Args:
+            text: Any known alias or raw OCR text.
+
+        Returns:
+            Sorted list of synonym strings.
+        """
+        return sorted(self._registry.all_aliases(text))
+
+    def find_group(self, text: str, fuzzy_threshold: int = 80) -> str | None:
+        """Find which synonym group *text* belongs to, using fuzzy matching.
+
+        Performs a fuzzy search over *all* aliases across all groups and
+        returns the canonical group name of the best match above
+        *fuzzy_threshold*.
+
+        Args:
+            text: Text to classify (e.g. an OCR result).
+            fuzzy_threshold: Minimum ``token_sort_ratio`` score 0–100.
+
+        Returns:
+            Canonical group name, or ``None`` if no group matches well enough.
+        """
+        # Fast path — exact (case-insensitive) lookup
+        exact = self._registry.resolve(text)
+        if exact is not None:
+            return exact
+
+        # Fuzzy path — compare against all aliases across all groups
+        from rapidfuzz import fuzz as _rfuzz
+
+        norm_text = text.lower().strip()
+        best_score = 0
+        best_canonical: str | None = None
+
+        for canonical, aliases in self._registry._canonical_to_aliases.items():
+            for alias in aliases:
+                score = int(_rfuzz.token_sort_ratio(norm_text, alias))
+                if score > best_score:
+                    best_score = score
+                    best_canonical = canonical
+
+        if best_score >= fuzzy_threshold:
+            return best_canonical
+        return None
+
+    def add_synonym(self, group: str, new_synonym: str) -> None:
+        """Add a new alias to *group*, creating the group if necessary.
+
+        Args:
+            group: Canonical group name (e.g. ``"close"``).
+            new_synonym: New alias string to register (e.g. ``"schließen"``).
+        """
+        self._registry.add_group(group, [new_synonym])
+
+    def groups(self) -> list[str]:
+        """Return all registered canonical group names.
+
+        Returns:
+            Sorted list of group names.
+        """
+        return sorted(self._registry._canonical_to_aliases.keys())
+
+    def all_aliases_flat(self) -> dict[str, list[str]]:
+        """Return all groups and their aliases as a plain dict.
+
+        Returns:
+            Mapping of canonical → sorted alias list.
+        """
+        return {k: sorted(v) for k, v in self._registry._canonical_to_aliases.items()}

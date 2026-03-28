@@ -279,11 +279,13 @@ class ScreenStateAnalyzer:
         ocr_engine: Any = None,
         template_matcher: Any = None,
         fuzzy_threshold: int = 70,
+        synonym_registry: Any | None = None,
     ) -> None:
         self._fingerprints: list[ScreenFingerprint] = fingerprints or []
         self._ocr = ocr_engine
         self._matcher = template_matcher
         self._fuzzy_threshold = fuzzy_threshold
+        self._synonym_registry = synonym_registry
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -424,18 +426,32 @@ class ScreenStateAnalyzer:
         return all_texts
 
     def _text_found(self, query: str, ocr_texts: list[str]) -> bool:
-        """Return True if *query* is found (fuzzy) in any of *ocr_texts*."""
+        """Return True if *query* (or any of its synonyms) is found in *ocr_texts*."""
         try:
             from rapidfuzz import fuzz
         except ImportError:
             # Exact substring fallback
             q = query.lower()
-            return any(q in t.lower() for t in ocr_texts)
+            if any(q in t.lower() for t in ocr_texts):
+                return True
+            if self._synonym_registry is not None:
+                for alias in self._synonym_registry.all_aliases(query):
+                    if any(alias in t.lower() for t in ocr_texts):
+                        return True
+            return False
 
         threshold = self._fuzzy_threshold
         for text in ocr_texts:
             if fuzz.partial_ratio(query.lower(), text.lower()) >= threshold:
                 return True
+
+        if self._synonym_registry is not None:
+            aliases = self._synonym_registry.all_aliases(query) - {query.lower().strip()}
+            for alias in aliases:
+                for text in ocr_texts:
+                    if fuzz.partial_ratio(alias, text.lower()) >= threshold:
+                        return True
+
         return False
 
     def _score(

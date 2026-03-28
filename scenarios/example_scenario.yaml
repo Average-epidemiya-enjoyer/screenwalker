@@ -1,89 +1,75 @@
-# ScreenWalker — Example Scenario
-# Demonstrates all supported actions, finders, and variable interpolation.
-# Run with: python -m screenwalker run scenarios/example_scenario.yaml --dry-run
+# ScreenWalker — Example Scenario: Notepad Automation
+# Demonstrates: launch, OCR find, template find, type, hotkey, assert_visible, screenshot
+#
+# Run:        python -m screenwalker run   scenarios/example_scenario.yaml
+# Validate:   python -m screenwalker validate scenarios/example_scenario.yaml
+# Dry-run:    python -m screenwalker run   scenarios/example_scenario.yaml --dry-run
+# With vars:  python -m screenwalker run   scenarios/example_scenario.yaml --var greeting="Hi!"
 
-name: Example Scenario — Notepad Automation
+name: Notepad Automation
 description: |
-  Opens Notepad (Windows) or gedit (Linux) / TextEdit (macOS),
-  types a greeting, saves the file, and asserts the title changed.
-  Serves as a smoke test for the full ScreenWalker pipeline.
-version: "1"
+  Opens Windows Notepad, types a greeting, saves the file via Ctrl+S,
+  confirms the Save-As dialog appeared, enters a filename, and confirms.
+  A final screenshot is taken for the run report.
+version: "2"
 
 # ── Variables ─────────────────────────────────────────────────────────────────
 variables:
   greeting: "Hello from ScreenWalker!"
   filename: "sw_test_output.txt"
 
-# ── Config overrides (merged on top of default.yaml) ──────────────────────────
+# ── Config overrides ──────────────────────────────────────────────────────────
 config:
   timeouts:
     step_default: 20
+    screenshot_delay: 0.3
   vision:
     ocr_engine: tesseract
+    ocr_lang: eng
     template_threshold: 0.78
   logging:
-    level: debug
+    level: info
     save_screenshots: true
 
 # ── Steps ─────────────────────────────────────────────────────────────────────
 steps:
 
-  # 1. Launch the text editor
-  - id: launch_editor
-    description: "Open Notepad (Windows) or fallback editor"
+  # 1. Launch Notepad
+  - id: launch_notepad
+    description: "Open Notepad"
     action: launch
-    target: "notepad.exe"           # Windows; override for macOS/Linux if needed
-    wait_after: 2.0                 # seconds to wait for the window to appear
+    target: "notepad.exe"
+    wait_after: 2.0
+    on_failure: abort
 
-  # 2. Assert the editor window appeared (OCR for window title area)
+  # 2. Assert Notepad window is visible (OCR for title bar text)
   - id: assert_editor_open
-    description: "Confirm editor window is visible"
+    description: "Verify Notepad is visible"
     action: assert_visible
     find:
       method: ocr
       query: "Notepad"
-      threshold: 0.70
-    timeout: 10
-    on_failure: abort               # abort | skip | continue
+      threshold: 0.65
+    timeout: 15
+    retries: 2
+    on_failure: abort
+    expect_screen: notepad_main
 
-  # 3. Click into the text area — use template matching with a reference image
-  - id: click_text_area
-    description: "Click the main editing area"
-    action: click
-    find:
-      method: template
-      template: templates/notepad_textarea.png
-      threshold: 0.75
-    fallback:
-      method: ocr
-      query: ""                     # empty string = largest text-free region heuristic
-    on_failure: skip
-
-  # 4. Type the greeting message
+  # 3. Type the greeting into the text area (no prior click needed — focus is already there)
   - id: type_greeting
-    description: "Type the greeting string from variables"
+    description: "Type the greeting message"
     action: type
     text: "{{ greeting }}"
-    clear_first: false
+    wait_after: 0.3
 
-  # 5. Press Ctrl+S to trigger Save As
-  - id: save_file
-    description: "Open Save As dialog"
+  # 4. Press Ctrl+S to open Save As dialog
+  - id: open_save_dialog
+    description: "Open Save As with Ctrl+S"
     action: hotkey
     keys: ["ctrl", "s"]
-    wait_after: 1.0
+    wait_after: 1.5
 
-  # 6. Assert Save As dialog appeared
-  - id: assert_save_dialog
-    description: "Confirm Save As dialog is present"
-    action: assert_visible
-    find:
-      method: ocr
-      query: "Save As"
-      threshold: 0.65
-    timeout: 8
-
-  # 7. Find filename input field and type the filename
+  # 5. Assert Save As dialog appeared and type the filename
   - id: type_filename
     description: "Enter filename in the Save As dialog"
     action: type
@@ -91,41 +77,25 @@ steps:
     find:
       method: ocr
       query: "File name"
-      offset: [120, 0]              # click 120px to the right of the label
+      threshold: 0.60
+      offset: [150, 0]
+    timeout: 10
+    on_failure: skip
+    expect_screen: save_as_dialog
 
-  # 8. Confirm save
-  - id: confirm_save
-    description: "Press Enter to confirm Save"
+  # 6. Confirm save and take a final screenshot
+  - id: confirm_and_capture
+    description: "Press Enter to confirm, then screenshot"
     action: hotkey
     keys: ["enter"]
     wait_after: 1.0
 
-  # 9. Assert the title bar updated with the filename
-  - id: assert_title_updated
-    description: "Verify title bar now shows the filename"
-    action: assert_text
-    find:
-      method: ocr
-      region: title_bar             # named region (defined in screen_state config)
-      query: "{{ filename }}"
-    fuzzy: true
-    fuzzy_threshold: 75
-
-  # 10. Take a final screenshot for the report
   - id: final_screenshot
-    description: "Capture final state for logs"
+    description: "Capture final state"
     action: screenshot
     label: "after_save"
 
-  # 11. Close the editor
-  - id: close_editor
-    description: "Close Notepad"
-    action: hotkey
-    keys: ["alt", "F4"]
-
-# ── Screen fingerprints ───────────────────────────────────────────────────────
-# Used by ScreenStateDetector / ScreenStateAnalyzer to identify logical screens.
-
+# ── Screen fingerprints (used by ScreenStateAnalyzer) ─────────────────────────
 screens:
 
   notepad_main:
@@ -133,14 +103,11 @@ screens:
       - "Notepad"
     forbidden_texts:
       - "Save As"
-      - "Error"
     optional_texts:
       - "File"
       - "Edit"
       - "View"
-      - "Help"
-    required_templates: []
-    match_threshold: 0.65
+    match_threshold: 0.60
 
   save_as_dialog:
     required_texts:
@@ -148,26 +115,13 @@ screens:
     forbidden_texts: []
     optional_texts:
       - "File name"
-      - "Save as type"
       - "Save"
       - "Cancel"
-    required_templates: []
-    match_threshold: 0.70
+    match_threshold: 0.65
 
-  error_dialog:
-    required_texts:
-      - "Error"
-    forbidden_texts:
-      - "Save As"
-    optional_texts:
-      - "OK"
-      - "Close"
-      - "Cancel"
-    required_templates: []
-    match_threshold: 0.60
-
-# ── Teardown (runs even if steps fail) ────────────────────────────────────────
+# ── Teardown (always runs, even after failure) ─────────────────────────────────
 teardown:
-  - id: cleanup_screenshot
+  - id: teardown_screenshot
+    description: "Capture state at end of run"
     action: screenshot
-    label: "teardown_state"
+    label: "teardown_final"

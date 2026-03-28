@@ -7,25 +7,51 @@ fallbacks, and the :class:`~screenwalker.core.context.RunContext`.
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
+from PIL import Image
 
 from screenwalker.core.context import RunContext, StepRecord
 from screenwalker.core.errors import (
+    ActionError,
     ElementNotFound,
     ScenarioError,
     ScenarioValidationError,
+    ScreenMismatch,
     StepTimeout,
 )
-from screenwalker.core.step import OnFailure
-from screenwalker.core.step import Step, StepAction
-from screenwalker.utils.config import AppConfig
+from screenwalker.core.step import FindMethod, FindSpec, OnFailure, Step, StepAction
+from screenwalker.learning.cache import ActionCache
+from screenwalker.learning.logger import StepLogger
+from screenwalker.utils.config import AppConfig, merge_scenario_config
+from screenwalker.vision.screen_state import BBox, FindResult
+
+if TYPE_CHECKING:
+    pass
 
 logger = structlog.get_logger(__name__)
+
+
+def _build_region(raw: str | list[int] | None) -> BBox | None:
+    """Convert a raw region spec to a BBox.
+
+    Args:
+        raw: Either ``None``, a named region string (ignored — returns None),
+            or a ``[x, y, w, h]`` list.
+
+    Returns:
+        BBox if *raw* is a list, else None.
+    """
+    if raw is None or isinstance(raw, str):
+        return None
+    if isinstance(raw, list) and len(raw) == 4:
+        return BBox(x=raw[0], y=raw[1], w=raw[2], h=raw[3])
+    return None
 
 
 class ScenarioEngine:
@@ -34,11 +60,14 @@ class ScenarioEngine:
     Each step is processed in sequence:
 
     1. **Interpolate** — substitute ``{{ variables }}`` in queries and text.
-    2. **Locate** — run the configured vision finder (OCR / template / YOLO).
-    3. **Act** — delegate to the appropriate action handler.
-    4. **Record** — write a :class:`~screenwalker.core.context.StepRecord`.
-    5. **Retry / fallback** — on failure, try fallback finder or retry up to
-       ``config.retry.max_attempts`` times with exponential back-off.
+    2. **Capture** — take a fresh screenshot.
+    3. **Verify screen** — check :attr:`~screenwalker.core.step.Step.expect_screen`
+       against the current UI state (if a screen analyzer is configured).
+    4. **Locate** — run the configured vision finder (cache → OCR / template / YOLO).
+    5. **Act** — delegate to the appropriate action handler.
+    6. **Record** — write a :class:`~screenwalker.core.context.StepRecord`.
+    7. **Retry** — on failure, retry up to ``step.retries`` times with
+       exponential back-off.
 
     Attributes:
         scenario_name: Human-readable name from YAML.
@@ -55,8 +84,18 @@ class ScenarioEngine:
         teardown_steps: list[Step],
         context: RunContext,
         config: AppConfig,
+        *,
+        capture: Any = None,
+        ocr_engine: Any = None,
+        template_matcher: Any = None,
+        screen_analyzer: Any = None,
+        mouse: Any = None,
+        keyboard: Any = None,
+        clipboard: Any = None,
+        cache: ActionCache | None = None,
+        step_logger: StepLogger | None = None,
     ) -> None:
-        """Initialize ScenarioEngine.
+        """Initialize ScenarioEngine with all subsystems.
 
         Args:
             scenario_name: Scenario display name.
@@ -64,6 +103,15 @@ class ScenarioEngine:
             teardown_steps: Steps run after main steps regardless of outcome.
             context: Run context shared across all steps.
             config: Validated application configuration.
+            capture: Override :class:`~screenwalker.vision.capture.ScreenCapture`.
+            ocr_engine: Override OCR engine (TesseractEngine or compatible).
+            template_matcher: Override :class:`~screenwalker.vision.template_match.TemplateMatcher`.
+            screen_analyzer: Override :class:`~screenwalker.vision.screen_state.ScreenStateAnalyzer`.
+            mouse: Override :class:`~screenwalker.actions.mouse.MouseController`.
+            keyboard: Override :class:`~screenwalker.actions.keyboard.KeyboardController`.
+            clipboard: Override :class:`~screenwalker.actions.clipboard.ClipboardManager`.
+            cache: Override :class:`~screenwalker.learning.cache.ActionCache`.
+            step_logger: Override :class:`~screenwalker.learning.logger.StepLogger`.
         """
         self.scenario_name = scenario_name
         self.steps = steps
@@ -71,6 +119,59 @@ class ScenarioEngine:
         self.context = context
         self.config = config
         self._log = structlog.get_logger(__name__).bind(scenario=scenario_name)
+
+        # ── Vision subsystems ────────────────────────────────────────────────
+        self._capture = capture or self._build_capture(config)
+        self._ocr = ocr_engine  # lazily set to None; callers inject for non-dry runs
+        self._matcher = template_matcher
+        self._screen_analyzer = screen_analyzer
+
+        # ── Action subsystems ────────────────────────────────────────────────
+        self._mouse = mouse or self._build_mouse(config)
+        self._keyboard = keyboard or self._build_keyboard(config)
+        self._clipboard = clipboard or self._build_clipboard(config)
+
+        # ── Learning subsystems ──────────────────────────────────────────────
+        self._cache = cache or ActionCache(
+            path=Path(config.learning.cache_path),
+            ttl=config.learning.cache_ttl_seconds,
+            enabled=config.learning.cache_enabled,
+        )
+        self._step_logger = step_logger or StepLogger(
+            output_dir=context.output_dir,
+            save_screenshots=config.logging.save_screenshots,
+            save_on_failure=config.logging.save_on_failure,
+        )
+
+    # ------------------------------------------------------------------
+    # Subsystem builders
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_capture(config: AppConfig) -> Any:
+        from screenwalker.vision.capture import ScreenCapture
+        return ScreenCapture(screenshot_delay=config.timeouts.screenshot_delay)
+
+    @staticmethod
+    def _build_mouse(config: AppConfig) -> Any:
+        from screenwalker.actions.mouse import MouseController
+        return MouseController(
+            move_duration=config.actions.mouse_move_duration,
+            humanize=config.actions.humanize,
+            humanize_offset_px=config.actions.humanize_offset_px,
+            humanize_delay_min_ms=config.actions.humanize_delay_min_ms,
+            humanize_delay_max_ms=config.actions.humanize_delay_max_ms,
+        )
+
+    @staticmethod
+    def _build_keyboard(config: AppConfig) -> Any:
+        from screenwalker.actions.keyboard import KeyboardController
+        return KeyboardController(typing_interval=config.actions.typing_interval)
+
+    @staticmethod
+    def _build_clipboard(config: AppConfig) -> Any:
+        from screenwalker.actions.clipboard import ClipboardManager
+        return ClipboardManager(settle_delay=config.actions.clipboard_settle_delay)
 
     # ------------------------------------------------------------------
     # Factory
@@ -108,17 +209,22 @@ class ScenarioEngine:
         if not isinstance(raw, dict):
             raise ScenarioValidationError("Scenario YAML must be a mapping at top level")
 
-        # TODO: validate with Pydantic schema
         scenario_name: str = raw.get("name", path.stem)
         raw_variables: dict[str, str] = raw.get("variables", {})
         variables = {**raw_variables, **(variable_overrides or {})}
 
-        # TODO: load config overrides from raw.get("config") and merge
         from screenwalker.utils.config import load_config
 
-        resolved_config = config or load_config(None)
+        base_config = config or load_config(None)
 
-        # Parse steps
+        # Apply per-scenario config overrides
+        scenario_config_raw = raw.get("config", {})
+        resolved_config = (
+            merge_scenario_config(base_config, scenario_config_raw)
+            if scenario_config_raw
+            else base_config
+        )
+
         steps = cls._parse_steps(raw.get("steps", []))
         teardown_steps = cls._parse_steps(raw.get("teardown", []))
 
@@ -128,13 +234,60 @@ class ScenarioEngine:
             output_dir=Path(resolved_config.logging.output_dir) / scenario_name,
         )
 
-        return cls(
+        engine = cls(
             scenario_name=scenario_name,
             steps=steps,
             teardown_steps=teardown_steps,
             context=context,
             config=resolved_config,
         )
+
+        # Load OCR engine if configured
+        if resolved_config.vision.ocr_engine == "tesseract":
+            try:
+                from screenwalker.vision.ocr import TesseractEngine
+                engine._ocr = TesseractEngine(
+                    lang=resolved_config.vision.ocr_lang,
+                    config=resolved_config.vision.ocr_config,
+                    preprocess=resolved_config.vision.ocr_preprocess,
+                )
+            except ImportError:
+                logger.warning("Tesseract not available — OCR steps will fail")
+
+        # Load template matcher if templates directory exists
+        templates_dir = path.parent / "templates"
+        if templates_dir.exists():
+            try:
+                from screenwalker.vision.template_match import TemplateMatcher
+                engine._matcher = TemplateMatcher(templates_dir=templates_dir)
+            except ImportError:
+                logger.warning("OpenCV not available — template steps will fail")
+
+        # Load screen fingerprints from scenario YAML
+        screens_config = raw.get("screens", {})
+        if screens_config and engine._ocr is not None:
+            try:
+                from screenwalker.vision.screen_state import ScreenStateAnalyzer, ScreenFingerprint
+                fingerprints = []
+                for state_id, cfg in screens_config.items():
+                    fp = ScreenFingerprint(
+                        screen_id=state_id,
+                        required_texts=cfg.get("required_texts", []),
+                        forbidden_texts=cfg.get("forbidden_texts", []),
+                        required_templates=cfg.get("required_templates", []),
+                        optional_texts=cfg.get("optional_texts", []),
+                        match_threshold=cfg.get("match_threshold", 0.75),
+                    )
+                    fingerprints.append(fp)
+                engine._screen_analyzer = ScreenStateAnalyzer(
+                    fingerprints=fingerprints,
+                    ocr_engine=engine._ocr,
+                    template_matcher=engine._matcher,
+                )
+            except Exception as exc:
+                logger.warning("Failed to init screen analyzer", error=str(exc))
+
+        return engine
 
     # ------------------------------------------------------------------
     # Execution
@@ -147,7 +300,11 @@ class ScenarioEngine:
             ScenarioError: Re-raised after teardown if any step with
                 ``on_failure=abort`` fails.
         """
+        run_start = time.monotonic()
         self._log.info("Scenario started", step_count=len(self.steps))
+        self._step_logger.log_scenario_start(
+            self.scenario_name, len(self.context.variables)
+        )
         failure: ScenarioError | None = None
 
         try:
@@ -155,12 +312,24 @@ class ScenarioEngine:
                 try:
                     self._execute_step(step)
                 except ScenarioError as exc:
-                    if step.on_failure == OnFailure.ABORT:
+                    if step.on_failure in (OnFailure.ABORT,):
                         failure = exc
                         break
-                    self._log.warning("Step failed, continuing", step_id=step.id, error=str(exc))
+                    self._log.warning(
+                        "Step failed, continuing",
+                        step_id=step.id,
+                        on_failure=step.on_failure.value,
+                        error=str(exc),
+                    )
         finally:
             self._run_teardown()
+            elapsed = time.monotonic() - run_start
+            self._step_logger.log_scenario_end(
+                self.scenario_name,
+                self.context.step_count,
+                len(self.context.failed_steps),
+                elapsed,
+            )
 
         if failure:
             raise failure
@@ -175,16 +344,61 @@ class ScenarioEngine:
         """Print planned steps without executing any actions."""
         self._log.info("DRY RUN — no actions will be executed")
         for i, step in enumerate(self.steps, start=1):
-            click_repr = f"[{step.action.value}]"
-            find_repr = f"find={step.find.method.value}:{step.find.query!r}" if step.find else ""
-            print(f"  {i:>3}. {step.id:<30} {click_repr:<20} {find_repr}")
+            action_repr = f"[{step.action.value}]"
+            find_repr = (
+                f"find={step.find.method.value}:{step.find.query!r}"
+                if step.find
+                else ""
+            )
+            print(f"  {i:>3}. {step.id:<30} {action_repr:<20} {find_repr}")
 
     # ------------------------------------------------------------------
-    # Step execution
+    # Step execution (with retry)
     # ------------------------------------------------------------------
 
     def _execute_step(self, step: Step) -> None:
-        """Execute a single step through the full pipeline.
+        """Execute a single step, retrying up to ``step.retries`` times.
+
+        Args:
+            step: The step to execute.
+
+        Raises:
+            ScenarioError: After all retry attempts are exhausted.
+        """
+        log = self._log.bind(step_id=step.id, action=step.action.value)
+        max_attempts = max(1, step.retries)
+        last_exc: ScenarioError | None = None
+
+        for attempt in range(max_attempts):
+            if attempt > 0:
+                backoff = min(
+                    self.config.retry.backoff_base ** attempt,
+                    self.config.retry.backoff_max,
+                )
+                log.info(
+                    "Retrying step",
+                    attempt=attempt + 1,
+                    max_attempts=max_attempts,
+                    backoff=round(backoff, 2),
+                )
+                time.sleep(backoff)
+
+            try:
+                self._execute_step_once(step)
+                return
+            except ScenarioError as exc:
+                last_exc = exc
+                log.warning(
+                    "Step attempt failed",
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+
+        assert last_exc is not None
+        raise last_exc
+
+    def _execute_step_once(self, step: Step) -> None:
+        """Execute a single step attempt through the full pipeline.
 
         Args:
             step: The step to execute.
@@ -192,6 +406,7 @@ class ScenarioEngine:
         Raises:
             StepTimeout: If the element is not found within the timeout.
             ElementNotFound: If all finders are exhausted.
+            ScreenMismatch: If expect_screen does not match the current screen.
             ActionError: If the action itself raises.
         """
         log = self._log.bind(step_id=step.id, action=step.action.value)
@@ -200,21 +415,32 @@ class ScenarioEngine:
         start = time.monotonic()
         success = False
         error: str | None = None
+        screenshot: Image.Image | None = None
 
         try:
-            # Interpolate variables into text / query fields
-            interpolated_step = self._interpolate_step(step)
+            # 1. Interpolate variables
+            interpolated = self._interpolate_step(step)
 
-            # Locate element (if a find spec is present)
-            find_result = None
-            if interpolated_step.find:
-                find_result = self._locate_with_retry(interpolated_step)
+            # 2. Capture screen
+            if not self.context.dry_run:
+                screenshot = self._capture.capture_full()
+                self.context.update_screenshot(screenshot)
 
-            # Dispatch action
-            self._dispatch_action(interpolated_step, find_result)
+            # 3. Verify screen state
+            if interpolated.expect_screen and not self.context.dry_run:
+                self._verify_screen_state(interpolated, screenshot)
 
-            if step.wait_after > 0:
-                time.sleep(step.wait_after)
+            # 4. Locate element
+            find_result: FindResult | None = None
+            if interpolated.find is not None and not self.context.dry_run:
+                find_result = self._locate_with_retry(interpolated)
+
+            # 5. Execute action
+            self._dispatch_action(interpolated, find_result)
+
+            # 6. Post-action pause
+            if interpolated.wait_after > 0:
+                time.sleep(interpolated.wait_after)
 
             success = True
 
@@ -223,15 +449,186 @@ class ScenarioEngine:
             raise
         finally:
             elapsed = time.monotonic() - start
-            self.context.record_step(
-                StepRecord(
-                    step_id=step.id,
-                    action=step.action.value,
-                    success=success,
-                    elapsed=elapsed,
-                    error=error,
-                )
+            record = StepRecord(
+                step_id=step.id,
+                action=step.action.value,
+                success=success,
+                elapsed=elapsed,
+                error=error,
             )
+            self.context.record_step(record)
+            try:
+                self._step_logger.log_step(
+                    record=record,
+                    screenshot=screenshot or self.context.last_screenshot,
+                )
+            except Exception as exc:
+                log.debug("Step logger error (non-fatal)", error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Screen state verification
+    # ------------------------------------------------------------------
+
+    def _verify_screen_state(self, step: Step, screenshot: Image.Image | None) -> None:
+        """Check the current screen matches step.expect_screen.
+
+        Args:
+            step: Step with a populated expect_screen field.
+            screenshot: Current screen image.
+
+        Raises:
+            ScreenMismatch: If the detected screen does not match the expected one.
+        """
+        if self._screen_analyzer is None or screenshot is None:
+            return
+        ident = self._screen_analyzer.identify(screenshot)
+        self.context.current_screen = ident.screen_id
+        if ident.screen_id != step.expect_screen:
+            raise ScreenMismatch(
+                step_id=step.id,
+                expected=step.expect_screen,
+                actual=ident.screen_id,
+            )
+
+    # ------------------------------------------------------------------
+    # Vision pipeline — locate element
+    # ------------------------------------------------------------------
+
+    def _locate_with_retry(self, step: Step) -> FindResult:
+        """Poll the screen until the target element is found or timeout expires.
+
+        Priority order on each poll:
+          1. Cache lookup (fast path)
+          2. Primary finder (``step.find``)
+          3. Fallback finder (``step.fallback``)
+
+        Args:
+            step: The (interpolated) step whose ``find`` spec describes the target.
+
+        Returns:
+            A :class:`~screenwalker.vision.screen_state.FindResult`.
+
+        Raises:
+            StepTimeout: If the element is not found within the timeout.
+        """
+        assert step.find is not None
+        timeout = step.timeout or self.config.timeouts.step_default
+        poll_interval = self.config.timeouts.poll_interval
+        deadline = time.monotonic() + timeout
+        log = self._log.bind(step_id=step.id, query=step.find.query)
+
+        first_poll = True
+        while True:
+            if not first_poll:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(poll_interval, remaining))
+            first_poll = False
+
+            # Capture fresh screenshot for each poll
+            try:
+                image = self._capture.capture_full()
+                self.context.update_screenshot(image)
+            except Exception as exc:
+                log.warning("Screen capture failed during locate", error=str(exc))
+                continue
+
+            # 1. Check cache
+            screen_id = self.context.current_screen or ""
+            cached = self._cache.lookup(screen_id, step.find.query)
+            if cached is not None:
+                log.debug("Element found in cache")
+                return cached
+
+            # 2. Primary finder
+            result = self._find_by_spec(image, step.find, step.id)
+
+            # 3. Fallback finder
+            if result is None and step.fallback is not None:
+                result = self._find_by_spec(image, step.fallback, step.id)
+
+            if result is not None:
+                # Store in cache for future steps
+                if screen_id:
+                    try:
+                        self._cache.store(screen_id, result)
+                    except Exception as exc:
+                        log.debug("Cache store failed (non-fatal)", error=str(exc))
+                return result
+
+            if time.monotonic() >= deadline:
+                break
+
+            log.debug("Element not found, retrying...", remaining=round(deadline - time.monotonic(), 1))
+
+        raise StepTimeout(step_id=step.id, timeout=timeout, query=step.find.query)
+
+    def _find_by_spec(
+        self, image: Image.Image, spec: FindSpec, step_id: str
+    ) -> FindResult | None:
+        """Run a single vision finder pass.
+
+        Args:
+            image: Current screenshot.
+            spec: FindSpec describing method, query, region, and thresholds.
+            step_id: Used in warning logs.
+
+        Returns:
+            FindResult if found, else None.
+        """
+        region = _build_region(spec.region)
+
+        if spec.method == FindMethod.TEMPLATE:
+            if self._matcher is None:
+                self._log.warning(
+                    "Template matcher not configured — cannot use template find",
+                    step_id=step_id,
+                )
+                return None
+            template_name = spec.template or spec.query
+            try:
+                match = self._matcher.find_one(
+                    image, template_name, threshold=spec.threshold, region=region
+                )
+            except FileNotFoundError as exc:
+                self._log.warning("Template not found", step_id=step_id, error=str(exc))
+                return None
+            if match is None:
+                return None
+            return FindResult(
+                element=match.template_name,
+                confidence=match.confidence,
+                bbox=match.bbox,
+                method="template",
+            )
+
+        if spec.method == FindMethod.OCR:
+            if self._ocr is None:
+                self._log.warning(
+                    "OCR engine not configured — cannot use ocr find",
+                    step_id=step_id,
+                )
+                return None
+            return self._ocr.find_text(
+                image,
+                spec.query,
+                threshold=spec.threshold,
+                region=region,
+                fuzzy=spec.fuzzy,
+            )
+
+        if spec.method == FindMethod.YOLO:
+            self._log.warning(
+                "YOLO finder is not yet implemented", step_id=step_id
+            )
+            return None
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Variable interpolation
+    # ------------------------------------------------------------------
 
     def _interpolate_step(self, step: Step) -> Step:
         """Return a copy of *step* with all ``{{ var }}`` tokens resolved.
@@ -240,36 +637,41 @@ class ScenarioEngine:
             step: Original step (not mutated).
 
         Returns:
-            New step with variables substituted.
+            New step with string fields variable-substituted.
         """
-        # TODO: deep-copy step and interpolate all string fields
-        return step
+        ctx = self.context
+        updates: dict[str, Any] = {}
 
-    def _locate_with_retry(self, step: Step) -> Any:
-        """Attempt to locate the element described by step.find, with retries.
+        if step.text is not None:
+            updates["text"] = ctx.interpolate(step.text)
+        if step.target is not None:
+            updates["target"] = ctx.interpolate(step.target)
+        if step.label is not None:
+            updates["label"] = ctx.interpolate(step.label)
 
-        Args:
-            step: Step containing a populated ``find`` spec.
+        # Interpolate the find query
+        if step.find is not None and step.find.query:
+            new_query = ctx.interpolate(step.find.query)
+            if new_query != step.find.query:
+                updates["find"] = step.find.model_copy(update={"query": new_query})
 
-        Returns:
-            A :class:`~screenwalker.vision.screen_state.FindResult`.
+        if not updates:
+            return step
+        return step.model_copy(update=updates)
 
-        Raises:
-            StepTimeout: If the element is not found within the timeout.
-        """
-        # TODO: import vision finders, poll until found or timeout
-        raise NotImplementedError("TODO: implement locate_with_retry")
+    # ------------------------------------------------------------------
+    # Action dispatch
+    # ------------------------------------------------------------------
 
-    def _dispatch_action(self, step: Step, find_result: Any) -> None:
+    def _dispatch_action(self, step: Step, find_result: FindResult | None) -> None:
         """Route a step to the appropriate action handler.
 
         Args:
             step: The (interpolated) step to execute.
             find_result: Located element, or None for actions that don't need one.
         """
-        # TODO: import action modules and dispatch based on step.action
         if self.context.dry_run:
-            logger.debug("DRY RUN action skipped", action=step.action.value, step_id=step.id)
+            logger.debug("DRY RUN — action skipped", action=step.action.value, step_id=step.id)
             return
 
         action_map = {
@@ -295,67 +697,193 @@ class ScenarioEngine:
         handler(step, find_result)
 
     # ------------------------------------------------------------------
-    # Action stubs — each delegates to the relevant actions/ module
+    # Action handlers
     # ------------------------------------------------------------------
 
-    def _action_click(self, step: Step, find_result: Any) -> None:
+    def _resolve_center(
+        self, step: Step, find_result: FindResult | None
+    ) -> tuple[int, int]:
+        """Return the (x, y) screen coordinate to act on.
+
+        Applies find spec offset if provided.
+
+        Args:
+            step: Current step (for offset).
+            find_result: Located element.
+
+        Returns:
+            (cx, cy) in screen pixels.
+
+        Raises:
+            ElementNotFound: If find_result is None.
+        """
+        if find_result is None:
+            query = step.find.query if step.find else "<no find spec>"
+            raise ElementNotFound(step.id, query, ["any"])
+        cx, cy = find_result.center
+        if step.find and step.find.offset:
+            cx += step.find.offset[0]
+            cy += step.find.offset[1]
+        return cx, cy
+
+    def _action_click(self, step: Step, find_result: FindResult | None) -> None:
         """Left-click the located element."""
-        # TODO: from screenwalker.actions.mouse import click; click(find_result.bbox)
-        raise NotImplementedError("TODO: implement click action")
+        cx, cy = self._resolve_center(step, find_result)
+        self._mouse.click(cx, cy, button="left")
 
-    def _action_double_click(self, step: Step, find_result: Any) -> None:
+    def _action_double_click(self, step: Step, find_result: FindResult | None) -> None:
         """Double-click the located element."""
-        raise NotImplementedError("TODO: implement double_click action")
+        cx, cy = self._resolve_center(step, find_result)
+        self._mouse.double_click(cx, cy)
 
-    def _action_right_click(self, step: Step, find_result: Any) -> None:
+    def _action_right_click(self, step: Step, find_result: FindResult | None) -> None:
         """Right-click the located element."""
-        raise NotImplementedError("TODO: implement right_click action")
+        cx, cy = self._resolve_center(step, find_result)
+        self._mouse.right_click(cx, cy)
 
-    def _action_type(self, step: Step, find_result: Any) -> None:
-        """Type text, optionally clearing the field first."""
-        raise NotImplementedError("TODO: implement type action")
+    def _action_type(self, step: Step, find_result: FindResult | None) -> None:
+        """Click the element (if found), optionally clear it, then type text."""
+        if find_result is not None:
+            cx, cy = self._resolve_center(step, find_result)
+            self._mouse.click(cx, cy)
 
-    def _action_hotkey(self, step: Step, find_result: Any) -> None:
+        if step.clear_first:
+            import pyautogui
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.press("delete")
+
+        text = step.text or ""
+        self._keyboard.type_text(text)
+
+    def _action_hotkey(self, step: Step, find_result: FindResult | None) -> None:
         """Send a key combination."""
-        raise NotImplementedError("TODO: implement hotkey action")
+        if not step.keys:
+            raise ActionError("hotkey action requires 'keys'", step_id=step.id)
+        self._keyboard.hotkey(*step.keys)
 
-    def _action_scroll(self, step: Step, find_result: Any) -> None:
-        """Scroll at the element position."""
-        raise NotImplementedError("TODO: implement scroll action")
+    def _action_scroll(self, step: Step, find_result: FindResult | None) -> None:
+        """Scroll at the element position or current cursor position."""
+        direction = str(step.extra.get("direction", "down"))
+        clicks = int(step.extra.get("clicks", 3))
+        if find_result is not None:
+            cx, cy = find_result.center
+        else:
+            import pyautogui
+            pos = pyautogui.position()
+            cx, cy = pos.x, pos.y
+        self._mouse.scroll(cx, cy, clicks=clicks, direction=direction)
 
-    def _action_drag(self, step: Step, find_result: Any) -> None:
-        """Drag from element to a target position."""
-        raise NotImplementedError("TODO: implement drag action")
+    def _action_drag(self, step: Step, find_result: FindResult | None) -> None:
+        """Drag from the element to a target position.
 
-    def _action_copy(self, step: Step, find_result: Any) -> None:
-        """Copy selection to a context variable via clipboard."""
-        raise NotImplementedError("TODO: implement copy action")
+        The target position is read from ``step.extra["to"]`` as [x, y].
+        """
+        if find_result is None:
+            query = step.find.query if step.find else "<no find spec>"
+            raise ElementNotFound(step.id, query, ["any"])
+        to = step.extra.get("to")
+        if not to or len(to) != 2:
+            raise ActionError(
+                "drag action requires extra.to = [x, y]", step_id=step.id
+            )
+        sx, sy = find_result.center
+        self._mouse.drag(sx, sy, int(to[0]), int(to[1]))
 
-    def _action_paste(self, step: Step, find_result: Any) -> None:
-        """Paste clipboard text at the current position."""
-        raise NotImplementedError("TODO: implement paste action")
+    def _action_copy(self, step: Step, find_result: FindResult | None) -> None:
+        """Copy the selection at the located element into a context variable."""
+        if find_result is not None:
+            cx, cy = self._resolve_center(step, find_result)
+            self._mouse.click(cx, cy)
+        text = self._clipboard.copy_selected()
+        var_name = str(step.extra.get("save_to", "clipboard"))
+        self.context.set_variable(var_name, text)
 
-    def _action_assert_visible(self, step: Step, find_result: Any) -> None:
-        """Assert that an element is visible (find_result must not be None)."""
-        raise NotImplementedError("TODO: implement assert_visible action")
+    def _action_paste(self, step: Step, find_result: FindResult | None) -> None:
+        """Paste clipboard contents at the current position."""
+        if find_result is not None:
+            cx, cy = self._resolve_center(step, find_result)
+            self._mouse.click(cx, cy)
+        self._clipboard.paste()
 
-    def _action_assert_text(self, step: Step, find_result: Any) -> None:
-        """Assert OCR text at location equals expected value."""
-        raise NotImplementedError("TODO: implement assert_text action")
+    def _action_assert_visible(self, step: Step, find_result: FindResult | None) -> None:
+        """Assert that the target element is visible on screen."""
+        if find_result is None:
+            query = step.find.query if step.find else "<no find spec>"
+            raise ElementNotFound(step.id, query, ["any"])
+        self._log.info(
+            "Assert visible — OK",
+            step_id=step.id,
+            element=find_result.element,
+            confidence=round(find_result.confidence, 3),
+        )
 
-    def _action_wait(self, step: Step, find_result: Any) -> None:
-        """Sleep for step.wait seconds."""
+    def _action_assert_text(self, step: Step, find_result: FindResult | None) -> None:
+        """Assert that the OCR-found element text matches the expected value."""
+        if find_result is None:
+            query = step.find.query if step.find else "<no find spec>"
+            raise ElementNotFound(step.id, query, ["ocr"])
+
+        expected = step.text or (step.find.query if step.find else "")
+        fuzzy_threshold = step.find.fuzzy_threshold if step.find else 80
+
+        try:
+            from rapidfuzz import fuzz
+            score = fuzz.partial_ratio(expected.lower(), find_result.element.lower())
+        except ImportError:
+            # Exact match fallback
+            score = 100 if expected.lower() in find_result.element.lower() else 0
+
+        if score < fuzzy_threshold:
+            raise ActionError(
+                f"assert_text failed: expected {expected!r}, "
+                f"got {find_result.element!r} (score={score}, threshold={fuzzy_threshold})",
+                step_id=step.id,
+            )
+        self._log.info(
+            "Assert text — OK",
+            step_id=step.id,
+            expected=expected,
+            found=find_result.element,
+            score=score,
+        )
+
+    def _action_wait(self, step: Step, find_result: FindResult | None) -> None:
+        """Sleep for a fixed duration."""
         duration = step.wait or 0.0
         logger.debug("Waiting", seconds=duration, step_id=step.id)
         time.sleep(duration)
 
-    def _action_launch(self, step: Step, find_result: Any) -> None:
-        """Launch an application."""
-        raise NotImplementedError("TODO: implement launch action")
+    def _action_launch(self, step: Step, find_result: FindResult | None) -> None:
+        """Launch an application by path, URL, or command."""
+        if not step.target:
+            raise ActionError("launch action requires 'target'", step_id=step.id)
 
-    def _action_screenshot(self, step: Step, find_result: Any) -> None:
-        """Capture and save a screenshot."""
-        raise NotImplementedError("TODO: implement screenshot action")
+        import platform
+        system = platform.system()
+        try:
+            if system == "Windows":
+                import os
+                os.startfile(step.target)  # type: ignore[attr-defined]
+            elif system == "Darwin":
+                subprocess.Popen(["open", step.target])
+            else:
+                subprocess.Popen([step.target])
+        except Exception as exc:
+            raise ActionError(
+                f"launch failed for target {step.target!r}: {exc}",
+                step_id=step.id,
+            ) from exc
+
+    def _action_screenshot(self, step: Step, find_result: FindResult | None) -> None:
+        """Capture and save a screenshot, updating the run context."""
+        image = self._capture.capture_full()
+        self.context.update_screenshot(image)
+        label = step.label or step.id
+        try:
+            path = self.context.save_screenshot(image, label)
+            self._log.info("Screenshot saved", step_id=step.id, path=str(path))
+        except Exception as exc:
+            self._log.warning("Screenshot save failed", step_id=step.id, error=str(exc))
 
     # ------------------------------------------------------------------
     # Teardown
@@ -366,8 +894,10 @@ class ScenarioEngine:
         for step in self.teardown_steps:
             try:
                 self._execute_step(step)
-            except Exception as exc:  # noqa: BLE001
-                self._log.warning("Teardown step failed", step_id=step.id, error=str(exc))
+            except Exception as exc:
+                self._log.warning(
+                    "Teardown step failed", step_id=step.id, error=str(exc)
+                )
 
     # ------------------------------------------------------------------
     # Helpers

@@ -14,7 +14,7 @@ engine-agnostic.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 from PIL import Image
@@ -378,6 +378,7 @@ class TesseractEngine:
         threshold: float = 0.70,
         region: BBox | None = None,
         fuzzy: bool = True,
+        synonym_registry: Any | None = None,
     ) -> FindResult | None:
         """Find the best-matching occurrence of *query* in *image*.
 
@@ -388,12 +389,15 @@ class TesseractEngine:
             region: Optional bounding box restricting the search area.
             fuzzy: Use RapidFuzz ``partial_ratio`` when True; exact
                 substring check when False.
+            synonym_registry: Optional :class:`~screenwalker.matching.SynonymRegistry`
+                used to expand *query* when the direct search finds nothing.
 
         Returns:
             :class:`FindResult` for the best match, or None.
         """
         matches = self.find_all_text(
-            image, query, threshold=threshold, region=region, fuzzy=fuzzy
+            image, query, threshold=threshold, region=region, fuzzy=fuzzy,
+            synonym_registry=synonym_registry,
         )
         return matches[0] if matches else None
 
@@ -404,8 +408,13 @@ class TesseractEngine:
         threshold: float = 0.70,
         region: BBox | None = None,
         fuzzy: bool = True,
+        synonym_registry: Any | None = None,
     ) -> list[FindResult]:
         """Find all occurrences of *query* in *image*.
+
+        When *synonym_registry* is provided and the direct search returns no
+        results, the query is expanded to all known aliases and each alias is
+        searched in turn.
 
         Args:
             image: Screenshot to search.
@@ -413,6 +422,7 @@ class TesseractEngine:
             threshold: Minimum confidence in [0.0, 1.0].
             region: Optional bounding box restricting the search area.
             fuzzy: Use fuzzy matching when True.
+            synonym_registry: Optional registry for synonym expansion fallback.
 
         Returns:
             List of :class:`FindResult` sorted by confidence descending.
@@ -428,30 +438,37 @@ class TesseractEngine:
         word_results = self.recognize(search_image)
         line_results = self._group_into_lines(word_results)
 
-        matches: list[FindResult] = []
-        query_norm = query.lower().strip()
-
-        for result in line_results:
-            text_norm = result.text.lower().strip()
-            if not text_norm:
-                continue
-
-            if fuzzy:
-                score = _rfuzz.partial_ratio(query_norm, text_norm) / 100.0
-            else:
-                score = 1.0 if query_norm in text_norm else 0.0
-
-            if score >= threshold:
-                final_bbox = result.bbox.offset(offset_x, offset_y)
-                matches.append(
-                    FindResult(
-                        element=result.text,
-                        confidence=score,
-                        bbox=final_bbox,
-                        method="ocr",
-                        metadata={"ocr_confidence": result.confidence},
+        def _score_lines(q: str) -> list[FindResult]:
+            q_norm = q.lower().strip()
+            found: list[FindResult] = []
+            for result in line_results:
+                text_norm = result.text.lower().strip()
+                if not text_norm:
+                    continue
+                if fuzzy:
+                    score = _rfuzz.partial_ratio(q_norm, text_norm) / 100.0
+                else:
+                    score = 1.0 if q_norm in text_norm else 0.0
+                if score >= threshold:
+                    final_bbox = result.bbox.offset(offset_x, offset_y)
+                    found.append(
+                        FindResult(
+                            element=result.text,
+                            confidence=score,
+                            bbox=final_bbox,
+                            method="ocr",
+                            metadata={"ocr_confidence": result.confidence},
+                        )
                     )
-                )
+            return found
+
+        matches = _score_lines(query)
+
+        if not matches and synonym_registry is not None:
+            aliases = synonym_registry.all_aliases(query) - {query.lower().strip()}
+            for alias in aliases:
+                alias_matches = _score_lines(alias)
+                matches.extend(alias_matches)
 
         return sorted(matches, key=lambda r: r.confidence, reverse=True)
 
@@ -537,10 +554,12 @@ class PaddleOCREngine:
         threshold: float = 0.70,
         region: BBox | None = None,
         fuzzy: bool = True,
+        synonym_registry: Any | None = None,
     ) -> FindResult | None:
         """Find the best-matching occurrence of *query* in *image*."""
         matches = self.find_all_text(
-            image, query, threshold=threshold, region=region, fuzzy=fuzzy
+            image, query, threshold=threshold, region=region, fuzzy=fuzzy,
+            synonym_registry=synonym_registry,
         )
         return matches[0] if matches else None
 
@@ -551,6 +570,7 @@ class PaddleOCREngine:
         threshold: float = 0.70,
         region: BBox | None = None,
         fuzzy: bool = True,
+        synonym_registry: Any | None = None,
     ) -> list[FindResult]:
         """Find all occurrences of *query* in *image*."""
         search_image = image
@@ -561,31 +581,39 @@ class PaddleOCREngine:
             )
             offset_x, offset_y = region.x, region.y
 
-        results = self.recognize(search_image)
-        matches: list[FindResult] = []
-        query_norm = query.lower().strip()
+        ocr_results = self.recognize(search_image)
 
-        for result in results:
-            text_norm = result.text.lower().strip()
-            if not text_norm:
-                continue
-
-            if fuzzy:
-                score = _rfuzz.partial_ratio(query_norm, text_norm) / 100.0
-            else:
-                score = 1.0 if query_norm in text_norm else 0.0
-
-            if score >= threshold:
-                final_bbox = result.bbox.offset(offset_x, offset_y)
-                matches.append(
-                    FindResult(
-                        element=result.text,
-                        confidence=score,
-                        bbox=final_bbox,
-                        method="ocr",
-                        metadata={"ocr_confidence": result.confidence},
+        def _score_results(q: str) -> list[FindResult]:
+            q_norm = q.lower().strip()
+            found: list[FindResult] = []
+            for result in ocr_results:
+                text_norm = result.text.lower().strip()
+                if not text_norm:
+                    continue
+                if fuzzy:
+                    score = _rfuzz.partial_ratio(q_norm, text_norm) / 100.0
+                else:
+                    score = 1.0 if q_norm in text_norm else 0.0
+                if score >= threshold:
+                    final_bbox = result.bbox.offset(offset_x, offset_y)
+                    found.append(
+                        FindResult(
+                            element=result.text,
+                            confidence=score,
+                            bbox=final_bbox,
+                            method="ocr",
+                            metadata={"ocr_confidence": result.confidence},
+                        )
                     )
-                )
+            return found
+
+        matches = _score_results(query)
+
+        if not matches and synonym_registry is not None:
+            aliases = synonym_registry.all_aliases(query) - {query.lower().strip()}
+            for alias in aliases:
+                alias_matches = _score_results(alias)
+                matches.extend(alias_matches)
 
         return sorted(matches, key=lambda r: r.confidence, reverse=True)
 
