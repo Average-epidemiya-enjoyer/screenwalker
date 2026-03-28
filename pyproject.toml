@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "screenwalker"
+version = "0.1.0"
+description = "Vision-based RPA framework for UI automation via screenshots"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ScreenWalker Contributors" }]
+keywords = ["rpa", "automation", "vision", "ocr", "ui-testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "pyautogui>=0.9.54",
+    "pillow>=10.0.0",
+    "opencv-python-headless>=4.8.0",
+    "pytesseract>=0.3.10",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "structlog>=23.0.0",
+    "click>=8.1.0",
+    "rapidfuzz>=3.0.0",
+    "pyperclip>=1.8.2",
+]
+
+[project.optional-dependencies]
+yolo = ["ultralytics>=8.0.0"]
+paddleocr = ["paddleocr>=2.7.0"]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+screenwalker = "screenwalker.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/screenwalker"
+Issues = "https://github.com/your-org/screenwalker/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["screenwalker*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=screenwalker --cov-report=term-missing --cov-fail-under=80"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "UP", "B", "C4", "PTH"]
+ignore = ["E501"]

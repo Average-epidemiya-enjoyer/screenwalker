@@ -1,0 +1,59 @@
+# ScreenWalker — Default Global Configuration
+# Override any key via a project-level config passed with --config.
+
+timeouts:
+  step_default: 15          # seconds to wait for an element before raising StepTimeout
+  poll_interval: 0.5        # seconds between find retries
+  screenshot_delay: 0.3     # seconds to pause before capturing (let UI settle)
+  action_delay: 0.1         # seconds to pause after each action
+
+vision:
+  # Template matching
+  template_threshold: 0.80  # minimum match confidence (0.0–1.0)
+  multi_scale: true         # enable multi-scale search (slower but more robust)
+  scale_min: 0.7
+  scale_max: 1.3
+  scale_steps: 10
+
+  # OCR
+  ocr_engine: tesseract     # tesseract | paddleocr
+  ocr_lang: eng             # Tesseract language code(s), e.g. "eng+rus"
+  ocr_config: "--psm 6"     # Tesseract page-segmentation mode
+  ocr_preprocess: true      # apply grayscale + threshold before OCR
+
+  # YOLO detector (optional)
+  yolo_enabled: false
+  yolo_model_path: null     # path to custom .pt weights; null = skip
+  yolo_confidence: 0.50
+
+  # Screen-state identification
+  screen_state_method: combined   # combined | ocr_only | template_only
+  screen_state_threshold: 0.75
+
+matching:
+  fuzzy_threshold: 80       # RapidFuzz score (0–100) to consider a text match
+  normalize_whitespace: true
+  case_insensitive: true
+
+actions:
+  mouse_move_duration: 0.2  # seconds for smooth mouse movement (0 = instant)
+  typing_interval: 0.03     # seconds between keystrokes
+  double_click_interval: 0.1
+
+logging:
+  level: info               # debug | info | warning | error
+  output_dir: logs/
+  save_screenshots: true    # save screenshot on each step
+  save_on_failure: true     # always save screenshot when a step fails
+  structured: true          # JSON structured output via structlog
+
+learning:
+  cache_enabled: true
+  cache_path: logs/cache.json
+  cache_ttl_seconds: 86400  # 24 h — discard stale cache entries
+  pattern_learning: false   # experimental: expand synonyms from OCR observations
+
+retry:
+  max_attempts: 3
+  backoff_base: 1.5         # exponential backoff multiplier
+  backoff_max: 30.0         # cap on wait between retries (seconds)

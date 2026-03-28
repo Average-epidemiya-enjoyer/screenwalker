@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.installed.cfg
+*.egg-link
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.lcov
+
+# Type checking
+.mypy_cache/
+.pyright/
+pyrightconfig.json
+
+# Linting
+.ruff_cache/
+
+# Logs and runtime artefacts
+logs/
+!logs/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ScreenWalker specific
+templates/*.png
+!templates/.gitkeep

@@ -1,0 +1,130 @@
+# ScreenWalker — Example Scenario
+# Demonstrates all supported actions, finders, and variable interpolation.
+# Run with: python -m screenwalker run scenarios/example_scenario.yaml --dry-run
+
+name: Example Scenario — Notepad Automation
+description: |
+  Opens Notepad (Windows) or gedit (Linux) / TextEdit (macOS),
+  types a greeting, saves the file, and asserts the title changed.
+  Serves as a smoke test for the full ScreenWalker pipeline.
+version: "1"
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+variables:
+  greeting: "Hello from ScreenWalker!"
+  filename: "sw_test_output.txt"
+
+# ── Config overrides (merged on top of default.yaml) ──────────────────────────
+config:
+  timeouts:
+    step_default: 20
+  vision:
+    ocr_engine: tesseract
+    template_threshold: 0.78
+  logging:
+    level: debug
+    save_screenshots: true
+
+# ── Steps ─────────────────────────────────────────────────────────────────────
+steps:
+
+  # 1. Launch the text editor
+  - id: launch_editor
+    description: "Open Notepad (Windows) or fallback editor"
+    action: launch
+    target: "notepad.exe"           # Windows; override for macOS/Linux if needed
+    wait_after: 2.0                 # seconds to wait for the window to appear
+
+  # 2. Assert the editor window appeared (OCR for window title area)
+  - id: assert_editor_open
+    description: "Confirm editor window is visible"
+    action: assert_visible
+    find:
+      method: ocr
+      query: "Notepad"
+      threshold: 0.70
+    timeout: 10
+    on_failure: abort               # abort | skip | continue
+
+  # 3. Click into the text area — use template matching with a reference image
+  - id: click_text_area
+    description: "Click the main editing area"
+    action: click
+    find:
+      method: template
+      template: templates/notepad_textarea.png
+      threshold: 0.75
+    fallback:
+      method: ocr
+      query: ""                     # empty string = largest text-free region heuristic
+    on_failure: skip
+
+  # 4. Type the greeting message
+  - id: type_greeting
+    description: "Type the greeting string from variables"
+    action: type
+    text: "{{ greeting }}"
+    clear_first: false
+
+  # 5. Press Ctrl+S to trigger Save As
+  - id: save_file
+    description: "Open Save As dialog"
+    action: hotkey
+    keys: ["ctrl", "s"]
+    wait_after: 1.0
+
+  # 6. Assert Save As dialog appeared
+  - id: assert_save_dialog
+    description: "Confirm Save As dialog is present"
+    action: assert_visible
+    find:
+      method: ocr
+      query: "Save As"
+      threshold: 0.65
+    timeout: 8
+
+  # 7. Find filename input field and type the filename
+  - id: type_filename
+    description: "Enter filename in the Save As dialog"
+    action: type
+    text: "{{ filename }}"
+    find:
+      method: ocr
+      query: "File name"
+      offset: [120, 0]              # click 120px to the right of the label
+
+  # 8. Confirm save
+  - id: confirm_save
+    description: "Press Enter to confirm Save"
+    action: hotkey
+    keys: ["enter"]
+    wait_after: 1.0
+
+  # 9. Assert the title bar updated with the filename
+  - id: assert_title_updated
+    description: "Verify title bar now shows the filename"
+    action: assert_text
+    find:
+      method: ocr
+      region: title_bar             # named region (defined in screen_state config)
+      query: "{{ filename }}"
+    fuzzy: true
+    fuzzy_threshold: 75
+
+  # 10. Take a final screenshot for the report
+  - id: final_screenshot
+    description: "Capture final state for logs"
+    action: screenshot
+    label: "after_save"
+
+  # 11. Close the editor
+  - id: close_editor
+    description: "Close Notepad"
+    action: hotkey
+    keys: ["alt", "F4"]
+
+# ── Teardown (runs even if steps fail) ────────────────────────────────────────
+teardown:
+  - id: cleanup_screenshot
+    action: screenshot
+    label: "teardown_state"
