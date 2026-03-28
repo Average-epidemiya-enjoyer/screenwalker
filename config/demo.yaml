@@ -1,0 +1,59 @@
+# ScreenWalker — Demo configuration
+#
+# Merged on top of config/default.yaml when running demo scenarios.
+# Optimised for reliability on a local desktop machine.
+#
+# Usage:
+#   python -m screenwalker run scenarios/demo_calculator.yaml --config config/demo.yaml
+#   python scripts/run_demo.py
+
+timeouts:
+  step_default: 25        # generous timeout so slow OCR still passes
+  poll_interval: 0.4      # check every 400 ms
+  screenshot_delay: 0.3   # brief pause before capturing screen
+  action_delay: 0.1       # pause between sub-actions
+
+vision:
+  ocr_engine: tesseract
+  ocr_lang: eng
+  ocr_config: "--psm 6"
+  ocr_preprocess: true    # grayscale + threshold before OCR (improves accuracy)
+  template_threshold: 0.80
+  multi_scale: true
+  scale_min: 0.8
+  scale_max: 1.2
+  scale_steps: 6
+  yolo_enabled: false
+
+matching:
+  fuzzy_threshold: 75     # slightly relaxed for OCR noise in demo environments
+  normalize_whitespace: true
+  case_insensitive: true
+
+actions:
+  mouse_move_duration: 0.35   # smooth mouse movement (visible in demo)
+  typing_interval: 0.04       # slight delay between keystrokes
+  double_click_interval: 0.1
+  humanize: true              # small random offsets on clicks (more natural)
+  humanize_offset_px: 3
+  humanize_delay_min_ms: 60
+  humanize_delay_max_ms: 180
+  clipboard_settle_delay: 0.25
+
+logging:
+  level: info
+  output_dir: "logs/demo/"
+  save_screenshots: true
+  save_on_failure: true
+  structured: true
+
+learning:
+  cache_enabled: true
+  cache_path: "logs/demo/cache.json"
+  cache_ttl_seconds: 3600    # 1 hour (shorter for demos)
+  pattern_learning: false
+
+retry:
+  max_attempts: 3
+  backoff_base: 1.5
+  backoff_max: 10.0

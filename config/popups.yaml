@@ -1,0 +1,96 @@
+# ScreenWalker — Popup Registry
+#
+# Each entry describes a popup the engine should automatically detect and
+# dismiss before executing the next step.  The engine checks for popups
+# after every screen capture.
+#
+# Fields:
+#   id                 — unique identifier (used in logs)
+#   indicators         — OCR text strings that signal this popup is visible
+#   templates          — template image names for visual matching (optional)
+#   action             — what to do: "click_button" | "wait" | "close"
+#   button_text        — ordered list of button labels to try clicking
+#   wait_timeout       — maximum seconds to wait (for "wait" action)
+#   wait_until_gone    — if true, poll until the popup disappears
+#   priority           — higher = checked first (default 0)
+#   confidence_threshold — minimum fraction of indicators that must match
+
+popups:
+
+  - id: error_dialog
+    indicators:
+      - "Error"
+      - "Ошибка"
+      - "Something went wrong"
+      - "An error occurred"
+      - "failed"
+    templates:
+      - "popup_error_icon.png"
+    action: click_button
+    button_text:
+      - "OK"
+      - "Close"
+      - "Закрыть"
+      - "Cancel"
+    priority: 10
+    confidence_threshold: 0.4
+
+  - id: confirmation_dialog
+    indicators:
+      - "Are you sure"
+      - "Вы уверены"
+      - "Confirm"
+      - "Do you want"
+      - "Вы хотите"
+    action: click_button
+    button_text:
+      - "Yes"
+      - "Да"
+      - "OK"
+      - "Confirm"
+    priority: 8
+    confidence_threshold: 0.4
+
+  - id: loading_screen
+    indicators:
+      - "Loading"
+      - "Загрузка"
+      - "Please wait"
+      - "Пожалуйста, подождите"
+      - "Processing"
+    action: wait
+    wait_timeout: 30
+    wait_until_gone: true
+    priority: 5
+    confidence_threshold: 0.4
+
+  - id: update_notification
+    indicators:
+      - "Update available"
+      - "A new version"
+      - "Доступно обновление"
+    action: click_button
+    button_text:
+      - "Later"
+      - "Remind me later"
+      - "Skip"
+      - "Close"
+      - "Отложить"
+    priority: 3
+    confidence_threshold: 0.5
+
+  - id: cookie_consent
+    indicators:
+      - "Accept cookies"
+      - "We use cookies"
+      - "Cookie"
+      - "Privacy"
+    action: click_button
+    button_text:
+      - "Accept"
+      - "Accept all"
+      - "OK"
+      - "Got it"
+      - "Agree"
+    priority: 2
+    confidence_threshold: 0.5

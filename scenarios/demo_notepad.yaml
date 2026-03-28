@@ -1,0 +1,187 @@
+# ScreenWalker — Demo Scenario: Notepad Clipboard Verification
+#
+# Demonstrates: launch, type, assert_visible, hotkey, copy (reads clipboard),
+#               assert_text, screenshot, close-without-save
+#
+# Run:      python -m screenwalker run scenarios/demo_notepad.yaml --config config/demo.yaml
+# Validate: python -m screenwalker validate scenarios/demo_notepad.yaml
+# Dry-run:  python -m screenwalker run scenarios/demo_notepad.yaml --dry-run
+#
+# Requirements:
+#   Windows: notepad.exe (built-in)
+#   macOS:   TextEdit — change target to "open -a TextEdit"
+#   Linux:   gedit     — change target to "gedit"
+#
+# What happens:
+#   1. Notepad opens with an empty document.
+#   2. The demo text is typed character-by-character via the keyboard.
+#   3. OCR confirms the text is visible on screen.
+#   4. Ctrl+A selects everything; Ctrl+C copies it to the clipboard.
+#   5. The copied text is stored in context variable "clipboard_text".
+#   6. assert_text verifies the typed text is still visually present (OCR).
+#   7. Alt+F4 closes Notepad; "Don't Save" dismisses the save dialog.
+
+name: "Demo — Notepad Clipboard Verification"
+description: |
+  Opens Notepad, types a test string, verifies it via OCR, copies it to
+  the clipboard, then closes without saving.  Demonstrates keyboard actions,
+  clipboard integration, and OCR-based assertions.
+version: "1"
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+variables:
+  demo_text: "Hello from Screenwalker!"
+
+# ── Per-scenario config overrides ─────────────────────────────────────────────
+config:
+  timeouts:
+    step_default: 20
+    poll_interval: 0.4
+    screenshot_delay: 0.3
+  vision:
+    ocr_engine: tesseract
+    ocr_lang: eng
+    ocr_preprocess: true
+  actions:
+    mouse_move_duration: 0.3
+    typing_interval: 0.04
+    humanize: true
+  logging:
+    save_screenshots: true
+    save_on_failure: true
+    output_dir: "logs/demo/"
+
+# ── Screen fingerprints ───────────────────────────────────────────────────────
+screens:
+  notepad_main:
+    required_texts:
+      - "Notepad"
+    forbidden_texts:
+      - "Save As"
+      - "Do you want"
+    optional_texts:
+      - "File"
+      - "Edit"
+      - "Untitled"
+    match_threshold: 0.60
+
+  close_dialog:
+    required_texts:
+      - "Don't Save"
+    optional_texts:
+      - "Save"
+      - "Cancel"
+      - "want to save"
+    match_threshold: 0.50
+
+# ── Steps ─────────────────────────────────────────────────────────────────────
+steps:
+
+  # ── 1. Open Notepad ─────────────────────────────────────────────────────────
+  - id: launch_notepad
+    description: "Launch Notepad"
+    action: launch
+    target: "notepad.exe"       # macOS: "open -a TextEdit"  Linux: "gedit"
+    wait_after: 2.0
+    on_failure: abort
+    retries: 1
+
+  # ── 2. Confirm Notepad is open ──────────────────────────────────────────────
+  - id: assert_notepad_open
+    description: "Verify Notepad window is visible"
+    action: assert_visible
+    find:
+      method: ocr
+      query: "Notepad"
+      threshold: 0.60
+      fuzzy: true
+    timeout: 15
+    retries: 3
+    on_failure: abort
+    expect_screen: notepad_main
+
+  # ── 3. Type the demo text ───────────────────────────────────────────────────
+  - id: type_demo_text
+    description: "Type '{{ demo_text }}' into the editor"
+    action: type
+    text: "{{ demo_text }}"
+    wait_after: 0.5
+    # Note: no 'find' spec — keyboard focus is already on the text area
+
+  # ── 4. Assert text is visible on screen ────────────────────────────────────
+  - id: assert_text_visible
+    description: "Confirm the text appears in the document (OCR)"
+    action: assert_visible
+    find:
+      method: ocr
+      query: "Hello from Screenwalker"
+      threshold: 0.60
+      fuzzy: true
+    timeout: 10
+    retries: 2
+    on_failure: continue
+
+  # ── 5. Select all text (Ctrl+A) ─────────────────────────────────────────────
+  - id: select_all
+    description: "Select all text with Ctrl+A"
+    action: hotkey
+    keys: ["ctrl", "a"]
+    wait_after: 0.3
+
+  # ── 6. Copy to clipboard (Ctrl+C) and store in variable ─────────────────────
+  # The copied text is saved to context.variables["clipboard_text"].
+  # Use it in subsequent steps as {{ clipboard_text }}.
+  - id: copy_to_clipboard
+    description: "Copy selection to clipboard"
+    action: copy
+    extra:
+      save_to: clipboard_text   # stored as context variable
+    wait_after: 0.3
+
+  # ── 7. Verify text still visible after copy ──────────────────────────────────
+  - id: assert_copied_text
+    description: "Assert '{{ demo_text }}' is still visible (clipboard round-trip)"
+    action: assert_text
+    find:
+      method: ocr
+      query: "Hello from Screenwalker"
+      threshold: 0.60
+      fuzzy: true
+      fuzzy_threshold: 70
+    text: "Hello from Screenwalker!"
+    timeout: 8
+    retries: 2
+    on_failure: continue
+
+  # ── 8. Screenshot before closing ────────────────────────────────────────────
+  - id: screenshot_before_close
+    description: "Capture state before closing"
+    action: screenshot
+    label: "notepad_before_close"
+
+  # ── 9. Close Notepad (Alt+F4) ────────────────────────────────────────────────
+  - id: close_notepad
+    description: "Close Notepad with Alt+F4"
+    action: hotkey
+    keys: ["alt", "f4"]
+    wait_after: 1.2
+
+  # ── 10. Dismiss "Do you want to save?" dialog ─────────────────────────────
+  - id: dismiss_save_dialog
+    description: "Click 'Don't Save' in the close dialog"
+    action: click
+    find:
+      method: ocr
+      query: "Don't Save"
+      threshold: 0.55
+      fuzzy: true
+    timeout: 8
+    retries: 3
+    on_failure: skip   # If already closed or dialog not present, skip gracefully
+
+# ── Teardown (always runs) ─────────────────────────────────────────────────────
+teardown:
+  - id: teardown_screenshot
+    description: "Final state screenshot"
+    action: screenshot
+    label: "notepad_teardown"

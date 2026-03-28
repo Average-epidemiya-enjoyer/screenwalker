@@ -1,209 +1,378 @@
 # ScreenWalker
 
-Vision-based RPA framework for automating any UI via screenshots — no DOM access, no API hooks required.
-Uses OpenCV template matching, OCR, and optional YOLO detection to locate elements and drive interactions.
+Vision-based RPA framework. Automates any UI by reading the screen —
+OCR, template matching, and YOLO detection. No DOM access, no APIs,
+no application-specific plugins required.
 
 ---
 
-## Architecture
-
-```
-screenwalker/
-├── core/          # ScenarioEngine (state machine), Step, RunContext, errors
-├── vision/        # Screen capture, OCR, template matching, YOLO detector, screen-state identification
-├── actions/       # Mouse, keyboard, clipboard primitives
-├── matching/      # Fuzzy text matching, UI synonym dictionary
-├── learning/      # Step logger, action cache, pattern updater
-└── utils/         # Config loader (Pydantic), retry decorator
-```
-
-### Key Concepts
-
-| Concept | Description |
-|---|---|
-| **Scenario** | YAML file describing a sequence of steps |
-| **Step** | Typed action unit: find element → act → assert |
-| **FindResult** | Unified result from any vision method: `(element, confidence, bbox, method)` |
-| **RunContext** | Per-run state bag: variables, history, screenshots |
-| **ScenarioEngine** | State machine that executes steps, handles retries and branching |
-| **ScreenState** | Identifies which "screen" the UI is on using OCR + template anchors |
-
-### Vision Pipeline
-
-```
-Screenshot → Template Match ──┐
-           → OCR Text Match ──┼──► FindResult(bbox, confidence, method)
-           → YOLO Detection ──┘
-```
-
-All three finders implement the same `Finder` Protocol and return a `FindResult`.
-`ScreenState` combines them to identify the current UI context before each step.
-
-### Learning System
-
-After each successful step the engine writes to a local cache:
-
-```
-screen_id + element_label → { bbox, method, confidence, timestamp }
-```
-
-On subsequent runs the cache is checked first (fast path) before running expensive vision.
-`patterns.py` exposes hooks to expand synonym dictionaries from observed OCR text.
-
----
-
-## Installation
+## 5-Minute Demo Quickstart
 
 ### Prerequisites
 
-- Python 3.10+
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) installed and on `PATH`
-- (Optional) CUDA-capable GPU for YOLO
+| Requirement | Check |
+|-------------|-------|
+| Python 3.10+ | `python --version` |
+| Tesseract OCR | `tesseract --version` |
+| ScreenWalker dependencies | `pip install -e .` |
 
-### Install
+**Install Tesseract (Windows):**
+Download the installer from https://github.com/UB-Mannheim/tesseract/wiki and add it to `PATH`.
 
+**Install Tesseract (macOS):**
 ```bash
-# Clone
-git clone https://github.com/your-org/screenwalker.git
-cd screenwalker
-
-# Install with pip (editable)
-pip install -e .
-
-# Or with optional YOLO support
-pip install -e ".[yolo]"
-
-# Dev dependencies
-pip install -e ".[dev]"
+brew install tesseract
 ```
 
-### Verify
+**Install Tesseract (Linux):**
+```bash
+sudo apt install tesseract-ocr
+```
+
+**Install Python dependencies:**
+```bash
+pip install -e ".[ocr]"
+# or manually:
+pip install pytesseract pillow pyautogui pyperclip rapidfuzz pydantic structlog click pyyaml numpy
+```
+
+---
+
+### Run the demos
 
 ```bash
+# Both demos (Calculator + Notepad)
+python scripts/run_demo.py
+
+# Calculator only  (7 + 3 = 10)
+python scripts/run_demo.py --scenario calc
+
+# Notepad only  (type → copy → verify)
+python scripts/run_demo.py --scenario notepad
+
+# Validate without executing any actions
+python scripts/run_demo.py --dry-run
+
+# Show debug engine logs
+python scripts/run_demo.py --verbose
+```
+
+Or use the standard CLI directly:
+
+```bash
+python -m screenwalker run scenarios/demo_calculator.yaml --config config/demo.yaml
+python -m screenwalker run scenarios/demo_notepad.yaml   --config config/demo.yaml
+```
+
+---
+
+### What the demos do
+
+#### Calculator demo  (`scenarios/demo_calculator.yaml`)
+
+1. Launches `calc.exe` (Windows Calculator in Standard mode)
+2. Waits for the UI to be visible (OCR finds "Calculator")
+3. Clicks button **7** via OCR text search
+4. Clicks button **+** via OCR text search
+5. Clicks button **3** via OCR text search
+6. Clicks button **=** via OCR text search
+7. Reads the result display with OCR — asserts it equals **"10"**
+8. Saves a screenshot to `logs/demo/`
+
+#### Notepad demo  (`scenarios/demo_notepad.yaml`)
+
+1. Launches `notepad.exe`
+2. Waits for the editor window (OCR finds "Notepad")
+3. Types **"Hello from Screenwalker!"** into the text area
+4. OCR asserts the text is visible on screen
+5. Presses `Ctrl+A` to select all
+6. Copies to clipboard via `Ctrl+C` — stores in context variable `clipboard_text`
+7. OCR-asserts the text still matches the expected string
+8. Saves a screenshot
+9. Closes with `Alt+F4` and clicks **"Don't Save"**
+
+---
+
+### Expected output
+
+```
+╭──────────────────────────────────────────────────────╮
+│  ScreenWalker  vision-based RPA demo                 │
+│  Automates any UI via OCR + computer vision          │
+╰──────────────────────────────────────────────────────╯
+
+▶ Validating scenarios
+  ✓  demo_calculator.yaml  —  8 step(s), 1 teardown step(s)
+  ✓  demo_notepad.yaml     —  10 step(s), 1 teardown step(s)
+
+▶ Running: Calculator  (7 + 3 = 10)
+  ✓  PASSED  in 12.4s
+
+▶ Running: Notepad  (clipboard round-trip)
+  ✓  PASSED  in 9.8s
+
+  Demo Results
+  ┌──────────────────────────────────┬────────┬───────┬────────────────────────────┐
+  │ Scenario                         │ Status │  Time │ Notes                      │
+  ├──────────────────────────────────┼────────┼───────┼────────────────────────────┤
+  │ Calculator  (7 + 3 = 10)         │  PASS  │ 12.4s │                            │
+  │ Notepad  (clipboard round-trip)  │  PASS  │  9.8s │ clipboard='Hello from ...' │
+  └──────────────────────────────────┴────────┴───────┴────────────────────────────┘
+
+  ✓  All 2 demo(s) passed (22.2s total)
+```
+
+Logs and screenshots are saved to `logs/demo/`.
+
+---
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `tesseract: command not found` | Install Tesseract and add to PATH |
+| `ModuleNotFoundError: pytesseract` | `pip install pytesseract` |
+| `ElementNotFound: "Calculator"` | Make sure Calculator opened in Standard mode; try `--verbose` |
+| OCR finds wrong "7" (e.g. in title bar) | Open Calculator first so the screen is clean; or add a `region` to the find spec |
+| Calculator opens in History/Scientific mode | Switch to Standard mode manually, or pass `--var` override |
+| Notepad "Don't Save" not found | Windows 10: try `query: "Don't Save"` — Windows 11 text may vary |
+| `pyautogui.FailSafeException` | Move mouse away from top-left corner; or set `pyautogui.FAILSAFE = False` |
+| `import pyautogui` fails on Linux | `sudo apt install python3-tk python3-dev` |
+
+---
+
+### Adapting the demos
+
+#### macOS
+
+Change `target` in both scenarios:
+
+```yaml
+# Calculator
+target: "open -a Calculator"
+
+# Text editor
+target: "open -a TextEdit"
+```
+
+#### Linux
+
+```yaml
+# Calculator
+target: "gnome-calculator"
+
+# Text editor
+target: "gedit"
+```
+
+---
+
+## Writing your own scenarios
+
+A scenario is a YAML file. Minimal example:
+
+```yaml
+name: My Automation
+steps:
+  - id: open_app
+    action: launch
+    target: "notepad.exe"
+    wait_after: 2.0
+
+  - id: type_text
+    action: type
+    text: "Hello!"
+
+  - id: save
+    action: hotkey
+    keys: [ctrl, s]
+    wait_after: 1.0
+```
+
+### Available actions
+
+| Action | What it does | Required fields |
+|--------|-------------|-----------------|
+| `launch` | Start an application | `target` |
+| `click` | Left-click a located element | `find` |
+| `double_click` | Double-click | `find` |
+| `right_click` | Right-click | `find` |
+| `type` | Type text | `text` |
+| `hotkey` | Key combination | `keys` |
+| `scroll` | Scroll at element | `find` (optional), `extra.direction`, `extra.clicks` |
+| `drag` | Drag to position | `find`, `extra.to` |
+| `copy` | Ctrl+C → clipboard | — |
+| `paste` | Ctrl+V | — |
+| `assert_visible` | Assert element is on screen | `find` |
+| `assert_text` | Assert OCR text matches | `find`, `text` |
+| `wait` | Sleep | `wait` (seconds) |
+| `screenshot` | Save screenshot | `label` (optional) |
+
+### Find methods
+
+```yaml
+find:
+  method: ocr          # or template, yolo
+  query: "Submit"      # text to find (OCR) or template name
+  threshold: 0.75      # minimum confidence
+  fuzzy: true          # enable fuzzy text matching
+  fuzzy_threshold: 80  # 0-100 (rapidfuzz score)
+  region: [x, y, w, h] # restrict search area (pixels)
+  offset: [dx, dy]     # pixel offset from found centre
+```
+
+### Variables
+
+Variables are defined in the `variables:` section and interpolated
+with `{{ var_name }}` syntax:
+
+```yaml
+variables:
+  username: admin
+
+steps:
+  - id: type_user
+    action: type
+    text: "{{ username }}"
+```
+
+Override from command line:
+```bash
+python -m screenwalker run scenario.yaml --var username=myuser
+```
+
+### Screen fingerprints
+
+Verify the UI is in the right state before acting:
+
+```yaml
+screens:
+  login_page:
+    required_texts: ["Sign In", "Password"]
+    forbidden_texts: ["Dashboard"]
+    match_threshold: 0.70
+
+steps:
+  - id: type_password
+    action: type
+    text: "{{ password }}"
+    expect_screen: login_page
+```
+
+---
+
+## CLI reference
+
+```bash
+# Run a scenario
+python -m screenwalker run SCENARIO [--config CONFIG] [--dry-run] [--var KEY=VALUE ...]
+
+# Validate without running
+python -m screenwalker validate SCENARIO
+
+# Capture a template image
+python -m screenwalker capture-template --name ok_button --region 100,200,80,30 --delay 3
+
+# Analyse execution logs
+python -m screenwalker analyze logs/
+
+# Suggest synonym entries for OCR mismatches
+python -m screenwalker suggest-synonyms logs/
+
+# Version
 python -m screenwalker --version
 ```
 
 ---
 
-## Quick Start
+## Project structure
+
+```
+screenwalker/
+├── config/
+│   ├── default.yaml          ← default configuration
+│   ├── demo.yaml             ← demo-optimised config
+│   └── synonyms.yaml         ← OCR synonym groups (33 groups, en+ru)
+├── scenarios/
+│   ├── example_scenario.yaml ← Notepad automation example
+│   ├── demo_calculator.yaml  ← Calculator demo (7+3=10)
+│   └── demo_notepad.yaml     ← Notepad clipboard demo
+├── scripts/
+│   ├── run_demo.py           ← pretty demo runner
+│   ├── download_model.py     ← download OmniParser V2 YOLO weights
+│   └── train_detector.py     ← fine-tune YOLO on custom screenshots
+├── templates/                ← PNG templates for template matching
+├── screenwalker/
+│   ├── core/                 ← ScenarioEngine, Step, RunContext, errors
+│   ├── vision/               ← OCR, template matching, YOLO detector, screen state
+│   ├── actions/              ← mouse, keyboard, clipboard controllers
+│   ├── learning/             ← action cache, step logger, pattern learner
+│   ├── matching/             ← fuzzy matcher, synonym registry
+│   └── utils/                ← config, retry
+└── tests/                    ← 464 tests, 81% coverage
+```
+
+---
+
+## Architecture overview
+
+```
+YAML scenario
+      │
+      ▼
+ScenarioEngine.from_yaml()
+      │
+      ├── VisionConfig → TesseractEngine / TemplateMatcher / UIElementDetector
+      ├── ActionsConfig → MouseController / KeyboardController / ClipboardManager
+      └── LearningConfig → ActionCache / StepLogger
+      │
+      ▼
+engine.run()
+      │
+      for each step:
+        1. interpolate {{ variables }}
+        2. capture screenshot
+        3. verify expect_screen (optional)
+        4. locate element:
+              cache hit?    → use cached BBox
+              step.find     → OCR / template / YOLO
+              step.fallback → alternative finder
+              YOLO fallback → auto-detect if yolo_enabled
+        5. dispatch action (click, type, hotkey, …)
+        6. wait_after
+        7. log to JSONL + screenshot
+      │
+      ▼
+teardown steps (always run)
+```
+
+---
+
+## Optional: YOLO detection
+
+For richer UI element discovery (icons, checkboxes, sliders without visible text):
 
 ```bash
-# Run the bundled example scenario
-python -m screenwalker run scenarios/example_scenario.yaml
+# Download OmniParser V2 weights (~25 MB)
+python scripts/download_model.py
 
-# Run with a custom config
-python -m screenwalker run scenarios/example_scenario.yaml --config config/default.yaml
-
-# Dry-run (validate only, no actions executed)
-python -m screenwalker run scenarios/example_scenario.yaml --dry-run
-
-# Verbose structured logs
-python -m screenwalker run scenarios/example_scenario.yaml --log-level debug
+# Enable in config/demo.yaml:
+# vision:
+#   yolo_enabled: true
+#   yolo_model_path: models/icon_detect/best.pt
+#   yolo_confidence: 0.50
 ```
+
+Then use `method: yolo` in find specs, or benefit from the automatic YOLO
+fallback that kicks in when OCR and template matching both fail.
 
 ---
 
-## Writing Scenarios
-
-```yaml
-# scenarios/my_scenario.yaml
-name: Login Flow
-description: Log into the application
-
-variables:
-  username: "admin"
-  password: "secret"
-
-steps:
-  - id: open_app
-    action: launch
-    target: "C:/Apps/MyApp.exe"
-
-  - id: find_username_field
-    action: click
-    find:
-      method: ocr          # ocr | template | yolo
-      query: "Username"
-      threshold: 0.7
-
-  - id: type_username
-    action: type
-    text: "{{ username }}"
-
-  - id: submit
-    action: hotkey
-    keys: ["enter"]
-
-  - id: assert_logged_in
-    action: assert_visible
-    find:
-      method: ocr
-      query: "Dashboard"
-    timeout: 10
-```
-
-### Supported Actions
-
-| Action | Description |
-|---|---|
-| `click` | Left-click found element |
-| `double_click` | Double-click found element |
-| `right_click` | Right-click found element |
-| `type` | Type text (supports `{{ variable }}`) |
-| `hotkey` | Send key combination |
-| `scroll` | Scroll at element position |
-| `drag` | Drag from element to target |
-| `copy` | Copy selection to clipboard variable |
-| `paste` | Paste clipboard text |
-| `assert_visible` | Assert element is visible |
-| `assert_text` | Assert OCR text equals value |
-| `wait` | Wait N seconds |
-| `launch` | Launch application |
-| `screenshot` | Save screenshot to logs |
-
----
-
-## Configuration
-
-Edit `config/default.yaml` to change global defaults:
-
-```yaml
-timeouts:
-  step_default: 15        # seconds to wait for element
-  screenshot_delay: 0.3   # seconds before capturing
-
-vision:
-  template_threshold: 0.8
-  ocr_engine: tesseract   # tesseract | paddleocr
-  ocr_lang: eng
-  multi_scale: true
-
-logging:
-  level: info
-  output_dir: logs/
-  save_screenshots: true
-```
-
----
-
-## Running Tests
+## Running tests
 
 ```bash
-pytest                          # all tests with coverage
-pytest tests/test_ocr.py -v     # single module
-pytest --cov-report=html        # HTML coverage report
+pip install -e ".[dev]"
+pytest                        # all 464 tests
+pytest tests/test_detector.py # YOLO detector tests only
+pytest --tb=short -q          # compact output with coverage report
 ```
-
----
-
-## Project Status
-
-This is an alpha skeleton. Core interfaces are defined; implementations are marked with `TODO`.
-
-Roadmap:
-- [ ] Full Tesseract OCR integration
-- [ ] Multi-scale template matching
-- [ ] YOLO UI element detection model
-- [ ] Action cache persistence
-- [ ] Web UI for scenario authoring
-- [ ] CI integration (headless mode)

@@ -1,0 +1,171 @@
+# ScreenWalker — Demo Scenario: Calculator (7 + 3 = 10)
+#
+# Demonstrates: launch, assert_visible, click (OCR), assert_text, screenshot
+#
+# Run:      python -m screenwalker run scenarios/demo_calculator.yaml --config config/demo.yaml
+# Validate: python -m screenwalker validate scenarios/demo_calculator.yaml
+# Dry-run:  python -m screenwalker run scenarios/demo_calculator.yaml --dry-run
+#
+# Requirements:
+#   Windows:  calc.exe (built-in, Standard mode)
+#   macOS:    Calculator.app  → change target to "open -a Calculator"
+#   Linux:    gnome-calculator → change target to "gnome-calculator"
+#
+# Note on OCR button finding:
+#   Single-digit buttons ("7", "3") are found by the highest-confidence OCR
+#   match.  If the display already contains a conflicting digit, increase the
+#   retries or use template matching instead (see scripts/capture-template).
+
+name: "Demo — Calculator (7 + 3 = 10)"
+description: |
+  Opens the system calculator, computes 7 + 3, reads the result via OCR,
+  and asserts it equals "10".  A screenshot is saved to logs/demo/.
+version: "1"
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+variables:
+  expected_result: "10"
+
+# ── Per-scenario config overrides ─────────────────────────────────────────────
+config:
+  timeouts:
+    step_default: 25
+    poll_interval: 0.4
+    screenshot_delay: 0.3
+  vision:
+    ocr_engine: tesseract
+    ocr_lang: eng
+    ocr_preprocess: true
+  actions:
+    mouse_move_duration: 0.35
+    humanize: true
+  logging:
+    save_screenshots: true
+    save_on_failure: true
+    output_dir: "logs/demo/"
+
+# ── Screen fingerprints ───────────────────────────────────────────────────────
+screens:
+  calculator_main:
+    required_texts:
+      - "7"
+      - "8"
+      - "9"
+    optional_texts:
+      - "Calculator"
+      - "4"
+      - "5"
+      - "6"
+      - "+"
+      - "="
+    match_threshold: 0.40   # 2 of 3 required texts must be present
+
+# ── Steps ─────────────────────────────────────────────────────────────────────
+steps:
+
+  # ── 1. Open Calculator ──────────────────────────────────────────────────────
+  - id: launch_calculator
+    description: "Launch Windows Calculator"
+    action: launch
+    target: "calc.exe"          # macOS: "open -a Calculator"  Linux: "gnome-calculator"
+    wait_after: 2.5
+    on_failure: abort
+    retries: 1
+
+  # ── 2. Confirm calculator is ready ──────────────────────────────────────────
+  - id: assert_calculator_open
+    description: "Verify Calculator UI is visible"
+    action: assert_visible
+    find:
+      method: ocr
+      query: "Calculator"
+      threshold: 0.55
+      fuzzy: true
+    timeout: 15
+    retries: 3
+    on_failure: abort
+    expect_screen: calculator_main
+
+  # ── 3. Click "7" ────────────────────────────────────────────────────────────
+  - id: click_seven
+    description: "Press the 7 button"
+    action: click
+    find:
+      method: ocr
+      query: "7"
+      threshold: 0.70
+      fuzzy: false
+    timeout: 10
+    wait_after: 0.4
+    retries: 2
+    on_failure: abort
+
+  # ── 4. Click "+" ────────────────────────────────────────────────────────────
+  - id: click_plus
+    description: "Press the + (Add) button"
+    action: click
+    find:
+      method: ocr
+      query: "+"
+      threshold: 0.65
+      fuzzy: false
+    timeout: 10
+    wait_after: 0.4
+    retries: 2
+    on_failure: abort
+
+  # ── 5. Click "3" ────────────────────────────────────────────────────────────
+  - id: click_three
+    description: "Press the 3 button"
+    action: click
+    find:
+      method: ocr
+      query: "3"
+      threshold: 0.70
+      fuzzy: false
+    timeout: 10
+    wait_after: 0.4
+    retries: 2
+    on_failure: abort
+
+  # ── 6. Click "=" ────────────────────────────────────────────────────────────
+  - id: click_equals
+    description: "Press the = (Equals) button"
+    action: click
+    find:
+      method: ocr
+      query: "="
+      threshold: 0.65
+      fuzzy: false
+    timeout: 10
+    wait_after: 0.6
+    retries: 2
+    on_failure: abort
+
+  # ── 7. Verify result = "10" ─────────────────────────────────────────────────
+  - id: verify_result
+    description: "Assert the display shows {{ expected_result }}"
+    action: assert_text
+    find:
+      method: ocr
+      query: "{{ expected_result }}"
+      threshold: 0.70
+      fuzzy: true
+      fuzzy_threshold: 80
+    text: "{{ expected_result }}"
+    timeout: 8
+    retries: 2
+    on_failure: continue     # Log failure but keep going to capture screenshot
+
+  # ── 8. Capture final state ───────────────────────────────────────────────────
+  - id: capture_result
+    description: "Save screenshot of the result"
+    action: screenshot
+    label: "calculator_result_10"
+
+# ── Teardown (always runs) ─────────────────────────────────────────────────────
+teardown:
+  - id: teardown_screenshot
+    description: "Final state screenshot"
+    action: screenshot
+    label: "calculator_teardown"
