@@ -25,7 +25,7 @@ from screenwalker.core.errors import (
     ScreenMismatch,
     StepTimeout,
 )
-from screenwalker.core.step import FindMethod, FindSpec, OnFailure, Step, StepAction
+from screenwalker.core.step import FindMethod, FindSpec, OnFailure, RecoveryTrigger, Step, StepAction
 from screenwalker.learning.cache import ActionCache
 from screenwalker.learning.logger import StepLogger
 from screenwalker.utils.config import AppConfig, merge_scenario_config
@@ -35,6 +35,14 @@ if TYPE_CHECKING:
     pass
 
 logger = structlog.get_logger(__name__)
+
+
+class _RecoveryGoto(Exception):
+    """Internal signal: jump execution to a named step after a recovery action."""
+
+    def __init__(self, step_id: str) -> None:
+        self.step_id = step_id
+        super().__init__(f"goto:{step_id}")
 
 
 def _build_region(raw: str | list[int] | None) -> BBox | None:
@@ -95,6 +103,7 @@ class ScenarioEngine:
         cache: ActionCache | None = None,
         step_logger: StepLogger | None = None,
         detector: Any = None,
+        popup_handler: Any = None,
     ) -> None:
         """Initialize ScenarioEngine with all subsystems.
 
@@ -128,6 +137,7 @@ class ScenarioEngine:
         self._matcher = template_matcher
         self._screen_analyzer = screen_analyzer
         self._detector = detector  # YOLO detector; None → no YOLO fallback
+        self._popup_handler = popup_handler
 
         # ── Action subsystems ────────────────────────────────────────────────
         self._mouse = mouse or self._build_mouse(config)
@@ -274,6 +284,20 @@ class ScenarioEngine:
             except ImportError:
                 logger.warning("OpenCV not available — template steps will fail")
 
+        # Load popup handler if popups config or popups.yaml exists
+        popups_config_path = path.parent / "popups.yaml"
+        if popups_config_path.exists() and engine._ocr is not None:
+            try:
+                from screenwalker.vision.popup import PopupHandler
+                engine._popup_handler = PopupHandler.from_yaml(
+                    popups_config_path,
+                    ocr_engine=engine._ocr,
+                    mouse=engine._mouse,
+                    template_matcher=engine._matcher,
+                )
+            except Exception as exc:
+                logger.warning("Failed to init popup handler", error=str(exc))
+
         # Load screen fingerprints from scenario YAML
         screens_config = raw.get("screens", {})
         if screens_config and engine._ocr is not None:
@@ -307,6 +331,8 @@ class ScenarioEngine:
     def run(self) -> None:
         """Execute all scenario steps, then run teardown steps.
 
+        Supports ``goto`` recovery actions that jump execution to a named step.
+
         Raises:
             ScenarioError: Re-raised after teardown if any step with
                 ``on_failure=abort`` fails.
@@ -319,9 +345,23 @@ class ScenarioEngine:
         failure: ScenarioError | None = None
 
         try:
-            for step in self.steps:
+            idx = 0
+            while idx < len(self.steps):
+                step = self.steps[idx]
                 try:
                     self._execute_step(step)
+                    idx += 1
+                except _RecoveryGoto as goto_req:
+                    step_ids = [s.id for s in self.steps]
+                    if goto_req.step_id in step_ids:
+                        idx = step_ids.index(goto_req.step_id)
+                        self._log.info("recovery.goto", target=goto_req.step_id)
+                    else:
+                        self._log.warning(
+                            "recovery.goto_target_not_found",
+                            target=goto_req.step_id,
+                        )
+                        idx += 1
                 except ScenarioError as exc:
                     if step.on_failure in (OnFailure.ABORT,):
                         failure = exc
@@ -332,6 +372,7 @@ class ScenarioEngine:
                         on_failure=step.on_failure.value,
                         error=str(exc),
                     )
+                    idx += 1
         finally:
             self._run_teardown()
             elapsed = time.monotonic() - run_start
@@ -370,11 +411,15 @@ class ScenarioEngine:
     def _execute_step(self, step: Step) -> None:
         """Execute a single step, retrying up to ``step.retries`` times.
 
+        Recovery actions are applied between attempts when the failure trigger
+        matches an entry in ``step.recovery``.
+
         Args:
             step: The step to execute.
 
         Raises:
             ScenarioError: After all retry attempts are exhausted.
+            _RecoveryGoto: If a recovery action specifies ``then: goto:<id>``.
         """
         log = self._log.bind(step_id=step.id, action=step.action.value)
         max_attempts = max(1, step.retries)
@@ -397,13 +442,26 @@ class ScenarioEngine:
             try:
                 self._execute_step_once(step)
                 return
+            except (ElementNotFound, StepTimeout) as exc:
+                last_exc = exc
+                log.warning("Step attempt failed", attempt=attempt + 1, error=str(exc))
+                if step.recovery and not self.context.dry_run:
+                    trigger = (
+                        RecoveryTrigger.TIMEOUT
+                        if isinstance(exc, StepTimeout)
+                        else RecoveryTrigger.ELEMENT_NOT_FOUND
+                    )
+                    if not self._apply_recovery(step, trigger):
+                        raise
+            except ScreenMismatch as exc:
+                last_exc = exc
+                log.warning("Step attempt failed", attempt=attempt + 1, error=str(exc))
+                if step.recovery and not self.context.dry_run:
+                    if not self._apply_recovery(step, RecoveryTrigger.SCREEN_MISMATCH):
+                        raise
             except ScenarioError as exc:
                 last_exc = exc
-                log.warning(
-                    "Step attempt failed",
-                    attempt=attempt + 1,
-                    error=str(exc),
-                )
+                log.warning("Step attempt failed", attempt=attempt + 1, error=str(exc))
 
         assert last_exc is not None
         raise last_exc
@@ -436,6 +494,16 @@ class ScenarioEngine:
             if not self.context.dry_run:
                 screenshot = self._capture.capture_full()
                 self.context.update_screenshot(screenshot)
+
+            # 2b. Detect and dismiss any popup before proceeding
+            if not self.context.dry_run and self._popup_handler is not None and screenshot is not None:
+                if self._popup_handler.detect_and_handle(
+                    screenshot,
+                    capture_fn=self._capture.capture_full,
+                ):
+                    log.info("popup_dismissed_before_step")
+                    screenshot = self._capture.capture_full()
+                    self.context.update_screenshot(screenshot)
 
             # 3. Verify screen state
             if interpolated.expect_screen and not self.context.dry_run:
@@ -910,6 +978,216 @@ class ScenarioEngine:
             self._log.info("Screenshot saved", step_id=step.id, path=str(path))
         except Exception as exc:
             self._log.warning("Screenshot save failed", step_id=step.id, error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Wait strategies
+    # ------------------------------------------------------------------
+
+    def wait_for_screen_change(
+        self,
+        timeout: float,
+        poll_interval: float = 0.5,
+        mse_threshold: float | None = None,
+    ) -> bool:
+        """Wait until the screen changes significantly (MSE metric).
+
+        Captures an initial screenshot and polls until the mean-squared error
+        between that baseline and the current screen exceeds *mse_threshold*.
+
+        Args:
+            timeout: Maximum wait time in seconds.
+            poll_interval: Seconds between screenshots.
+            mse_threshold: Minimum MSE to consider the screen changed.
+                Defaults to ``config.vision.screen_change_mse_threshold``.
+
+        Returns:
+            True if the screen changed within *timeout*, False otherwise.
+        """
+        threshold = (
+            mse_threshold
+            if mse_threshold is not None
+            else getattr(self.config.vision, "screen_change_mse_threshold", 100.0)
+        )
+        try:
+            import numpy as np
+        except ImportError:
+            self._log.warning("wait_for_screen_change requires numpy; falling back to fixed wait")
+            time.sleep(min(timeout, 1.0))
+            return True
+
+        initial = self._capture.capture_full()
+        arr_initial = np.array(initial).astype(float)
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            time.sleep(min(poll_interval, max(0.0, remaining)))
+            current = self._capture.capture_full()
+            arr_current = np.array(current).astype(float)
+            if arr_initial.shape == arr_current.shape:
+                mse = float(np.mean((arr_initial - arr_current) ** 2))
+                if mse >= threshold:
+                    self._log.debug("wait_for_screen_change.detected", mse=round(mse, 2))
+                    return True
+
+        self._log.warning("wait_for_screen_change.timeout", timeout=timeout)
+        return False
+
+    def wait_for_element(
+        self,
+        find_spec: "FindSpec",
+        timeout: float,
+        poll_interval: float = 0.5,
+    ) -> "FindResult | None":
+        """Poll until the target element appears on screen.
+
+        Args:
+            find_spec: Vision spec describing the element to locate.
+            timeout: Maximum wait time in seconds.
+            poll_interval: Seconds between polls.
+
+        Returns:
+            :class:`~screenwalker.vision.screen_state.FindResult` when found,
+            or ``None`` if timeout elapsed.
+        """
+        deadline = time.monotonic() + timeout
+        first = True
+        while time.monotonic() < deadline:
+            if not first:
+                remaining = deadline - time.monotonic()
+                time.sleep(min(poll_interval, max(0.0, remaining)))
+            first = False
+            try:
+                image = self._capture.capture_full()
+            except Exception as exc:
+                self._log.warning("wait_for_element.capture_failed", error=str(exc))
+                continue
+            result = self._find_by_spec(image, find_spec, "wait_for_element")
+            if result is not None:
+                return result
+
+        self._log.warning("wait_for_element.timeout", query=find_spec.query, timeout=timeout)
+        return None
+
+    def wait_for_element_gone(
+        self,
+        find_spec: "FindSpec",
+        timeout: float,
+        poll_interval: float = 0.5,
+    ) -> bool:
+        """Poll until the target element disappears from screen.
+
+        Args:
+            find_spec: Vision spec describing the element to watch.
+            timeout: Maximum wait time in seconds.
+            poll_interval: Seconds between polls.
+
+        Returns:
+            True if the element disappeared within *timeout*, False otherwise.
+        """
+        deadline = time.monotonic() + timeout
+        first = True
+        while time.monotonic() < deadline:
+            if not first:
+                remaining = deadline - time.monotonic()
+                time.sleep(min(poll_interval, max(0.0, remaining)))
+            first = False
+            try:
+                image = self._capture.capture_full()
+            except Exception as exc:
+                self._log.warning("wait_for_element_gone.capture_failed", error=str(exc))
+                continue
+            result = self._find_by_spec(image, find_spec, "wait_for_element_gone")
+            if result is None:
+                self._log.debug("wait_for_element_gone.gone", query=find_spec.query)
+                return True
+
+        self._log.warning("wait_for_element_gone.timeout", query=find_spec.query, timeout=timeout)
+        return False
+
+    # ------------------------------------------------------------------
+    # Recovery
+    # ------------------------------------------------------------------
+
+    def _apply_recovery(self, step: Step, trigger: RecoveryTrigger) -> bool:
+        """Execute the recovery action matching *trigger*.
+
+        Args:
+            step: The step that failed.
+            trigger: Which error condition fired.
+
+        Returns:
+            True to continue retrying, False to abort (caller should re-raise).
+
+        Raises:
+            _RecoveryGoto: When the recovery specifies ``then: goto:<step_id>``.
+        """
+        matching = [r for r in step.recovery if r.trigger == trigger]
+        if not matching:
+            return True
+
+        recovery = matching[0]
+        log = self._log.bind(
+            step_id=step.id,
+            trigger=trigger.value,
+            recovery_action=recovery.action,
+        )
+        log.info("recovery.applying")
+
+        if recovery.action == "screenshot_and_abort":
+            if self.context.last_screenshot is not None:
+                try:
+                    self.context.save_screenshot(
+                        self.context.last_screenshot,
+                        f"recovery_{step.id}_{trigger.value}",
+                    )
+                except Exception as exc:
+                    log.debug("recovery.screenshot_save_failed", error=str(exc))
+            return False
+
+        if recovery.action == "scroll_down":
+            try:
+                import pyautogui
+                pyautogui.scroll(-3)
+                time.sleep(0.3)
+            except Exception as exc:
+                log.warning("recovery.scroll_failed", error=str(exc))
+
+        elif recovery.action == "scroll_up":
+            try:
+                import pyautogui
+                pyautogui.scroll(3)
+                time.sleep(0.3)
+            except Exception as exc:
+                log.warning("recovery.scroll_failed", error=str(exc))
+
+        elif recovery.action == "press_escape":
+            try:
+                import pyautogui
+                pyautogui.press("escape")
+                time.sleep(0.3)
+            except Exception as exc:
+                log.warning("recovery.press_escape_failed", error=str(exc))
+
+        elif recovery.action == "press_key":
+            keys = recovery.keys or []
+            if keys:
+                try:
+                    import pyautogui
+                    pyautogui.hotkey(*keys)
+                    time.sleep(0.3)
+                except Exception as exc:
+                    log.warning("recovery.press_key_failed", keys=keys, error=str(exc))
+
+        else:
+            log.warning("recovery.unknown_action", action=recovery.action)
+
+        if recovery.then and recovery.then.startswith("goto:"):
+            target_step_id = recovery.then[5:]
+            log.info("recovery.goto_triggered", target=target_step_id)
+            raise _RecoveryGoto(target_step_id)
+
+        return True
 
     # ------------------------------------------------------------------
     # Teardown

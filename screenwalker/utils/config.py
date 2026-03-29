@@ -74,6 +74,7 @@ class VisionConfig(BaseModel):
     yolo_confidence: float = Field(default=0.50, ge=0.0, le=1.0)
     screen_state_method: str = "combined"
     screen_state_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+    screen_change_mse_threshold: float = Field(default=100.0, ge=0.0)
 
 
 class MatchingConfig(BaseModel):

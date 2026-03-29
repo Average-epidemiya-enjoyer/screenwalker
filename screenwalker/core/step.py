@@ -12,6 +12,36 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+class RecoveryTrigger(str, Enum):
+    """Error condition that activates a recovery action."""
+
+    ELEMENT_NOT_FOUND = "element_not_found"
+    SCREEN_MISMATCH = "screen_mismatch"
+    TIMEOUT = "timeout"
+
+
+class RecoveryAction(BaseModel):
+    """A single recovery action executed when a step fails with a specific trigger.
+
+    Attributes:
+        trigger: Error condition that activates this recovery.
+        action: Strategy to apply — ``scroll_down``, ``scroll_up``,
+            ``press_escape``, ``press_key``, or ``screenshot_and_abort``.
+        retries: Maximum times this recovery may be applied (reserved for
+            future use; currently the first matching action is applied once
+            per retry attempt).
+        then: Optional post-recovery directive.  Currently supports
+            ``"goto:<step_id>"`` to jump execution to a named step.
+        keys: Key names to press (for ``press_key`` action).
+    """
+
+    trigger: RecoveryTrigger
+    action: str
+    retries: int = Field(default=1, ge=0)
+    then: str | None = None
+    keys: list[str] | None = None
+
+
 class StepAction(str, Enum):
     """Enumeration of all supported step actions."""
 
@@ -119,6 +149,7 @@ class Step(BaseModel):
     expect_screen: str | None = None
     next_step: str | None = None
     retries: int = Field(default=3, ge=0)
+    recovery: list[RecoveryAction] = Field(default_factory=list)
 
     model_config = {"extra": "allow"}
 
