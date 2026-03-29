@@ -1,12 +1,12 @@
-"""Retry utilities: legacy decorator and structured RetryStrategy.
+"""Утилиты повторных попыток: устаревший декоратор и структурированный RetryStrategy.
 
-Example (legacy)::
+Example (устаревший вариант)::
 
     >>> from screenwalker.utils.retry import retry
     >>> @retry(max_attempts=3, exceptions=(TimeoutError,), backoff_base=1.5)
     ... def unstable(): ...
 
-Example (structured)::
+Example (структурированный вариант)::
 
     >>> from screenwalker.utils.retry import RetryStrategy, with_retry
     >>> strategy = RetryStrategy(max_retries=3, backoff="exponential", base_delay=0.5)
@@ -36,14 +36,14 @@ F = TypeVar("F", bound=Callable)
 
 @dataclass
 class RetryStrategy:
-    """Structured retry configuration.
+    """Структурированная конфигурация повторных попыток.
 
     Attributes:
-        max_retries: Total number of attempts (1 = no retries).
-        backoff: Delay growth strategy — ``"linear"`` or ``"exponential"``.
-        base_delay: Starting delay in seconds.
-        max_delay: Upper cap on delay in seconds.
-        jitter: Add up to 1 s of uniform random jitter.
+        max_retries: Общее число попыток (1 = без повторов).
+        backoff: Стратегия увеличения задержки — ``"linear"`` или ``"exponential"``.
+        base_delay: Начальная задержка в секундах.
+        max_delay: Максимальная задержка в секундах.
+        jitter: Добавить до 1 с равномерного случайного джиттера.
     """
 
     max_retries: int = 3
@@ -53,15 +53,15 @@ class RetryStrategy:
     jitter: bool = False
 
     def delay_for(self, attempt: int) -> float:
-        """Compute wait duration before the given 1-based attempt.
+        """Вычисляет время ожидания перед указанной попыткой (нумерация с 1).
 
-        Returns 0 for the first attempt (no delay before the first try).
+        Для первой попытки возвращает 0 (задержка перед первой попыткой не нужна).
 
         Args:
-            attempt: 1-based attempt number.
+            attempt: Номер попытки (нумерация с 1).
 
         Returns:
-            Delay in seconds, capped at :attr:`max_delay`.
+            Задержка в секундах, ограниченная :attr:`max_delay`.
         """
         if attempt <= 1:
             return 0.0
@@ -81,18 +81,18 @@ def with_retry(
     exceptions: tuple[type[Exception], ...] = (Exception,),
     on_retry: Callable[[int, Exception], None] | None = None,
 ) -> Callable[[F], F]:
-    """Decorator that retries a function according to *strategy*.
+    """Декоратор, повторяющий вызов функции согласно *strategy*.
 
     Args:
-        strategy: :class:`RetryStrategy` controlling delays and attempt count.
-        exceptions: Exception types that trigger a retry.
-        on_retry: Optional callback ``(attempt, exc)`` called before each retry.
+        strategy: :class:`RetryStrategy`, управляющий задержками и числом попыток.
+        exceptions: Типы исключений, вызывающие повтор.
+        on_retry: Необязательный колбэк ``(attempt, exc)``, вызываемый перед каждым повтором.
 
     Returns:
-        Decorator wrapping a callable with retry logic.
+        Декоратор, оборачивающий функцию логикой повторных попыток.
 
     Raises:
-        The last exception if all attempts are exhausted.
+        Последнее возникшее исключение после исчерпания всех попыток.
     """
 
     def decorator(func: F) -> F:
@@ -127,7 +127,7 @@ def with_retry(
 
 
 # ---------------------------------------------------------------------------
-# Legacy retry decorator
+# Устаревший декоратор retry
 # ---------------------------------------------------------------------------
 
 
@@ -139,23 +139,23 @@ def retry(
     jitter: bool = True,
     on_retry: Callable[[int, Exception], None] | None = None,
 ) -> Callable[[F], F]:
-    """Decorator factory that retries a function on specified exceptions.
+    """Фабрика декораторов, повторяющих функцию при указанных исключениях.
 
-    Uses exponential back-off: ``delay = min(backoff_base ** attempt, backoff_max)``
+    Использует экспоненциальное увеличение задержки: ``delay = min(backoff_base ** attempt, backoff_max)``
 
     Args:
-        max_attempts: Total number of attempts (1 = no retries).
-        exceptions: Tuple of exception types that trigger a retry.
-        backoff_base: Exponential base for delay calculation.
-        backoff_max: Maximum delay cap in seconds.
-        jitter: Add uniform random jitter (0–1 s).
-        on_retry: Optional callback ``(attempt_number, exception)`` before each retry.
+        max_attempts: Общее число попыток (1 = без повторов).
+        exceptions: Кортеж типов исключений, вызывающих повтор.
+        backoff_base: Основание степени для вычисления задержки.
+        backoff_max: Максимальная задержка в секундах.
+        jitter: Добавить равномерный случайный джиттер (0–1 с).
+        on_retry: Необязательный колбэк ``(номер_попытки, исключение)`` перед повтором.
 
     Returns:
-        Decorator that wraps a callable with retry logic.
+        Декоратор, оборачивающий функцию логикой повторных попыток.
 
     Raises:
-        The last exception raised if all attempts are exhausted.
+        Последнее возникшее исключение после исчерпания всех попыток.
     """
 
     def decorator(func: F) -> F:
@@ -201,16 +201,16 @@ def retry_until(
     poll_interval: float = 0.5,
     description: str = "condition",
 ) -> bool:
-    """Poll *condition* until it returns True or *timeout* elapses.
+    """Опрашивает *condition* до возврата True или истечения *timeout*.
 
     Args:
-        condition: Zero-argument callable returning True when satisfied.
-        timeout: Maximum total wait time in seconds.
-        poll_interval: Seconds between polls.
-        description: Human-readable description for log messages.
+        condition: Вызываемый без аргументов объект, возвращающий True при выполнении условия.
+        timeout: Максимальное общее время ожидания в секундах.
+        poll_interval: Интервал между опросами в секундах.
+        description: Читаемое описание для сообщений лога.
 
     Returns:
-        True if condition was satisfied within timeout, False otherwise.
+        True если условие выполнено в рамках таймаута, иначе False.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

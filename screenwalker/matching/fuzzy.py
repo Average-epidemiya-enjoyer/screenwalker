@@ -1,15 +1,15 @@
-"""Fuzzy text matching using RapidFuzz.
+"""Нечёткое сопоставление текста с использованием RapidFuzz.
 
-Provides normalisation helpers and a :class:`FuzzyMatcher` that scores
-query strings against a corpus of OCR-extracted text tokens.
+Предоставляет вспомогательные функции нормализации и класс :class:`FuzzyMatcher`,
+который оценивает строки запроса относительно корпуса токенов, извлечённых OCR.
 
-Scoring conventions
--------------------
-* Module-level :func:`fuzzy_score` and :func:`fuzzy_match` use **float** scores
-  in ``[0.0, 1.0]`` for backward compatibility with the vision pipeline.
-* :class:`FuzzyMatcher` new-style methods (:meth:`~FuzzyMatcher.match`,
-  :meth:`~FuzzyMatcher.best_match`, :meth:`~FuzzyMatcher.contains_fuzzy`) use
-  **int** scores in ``[0, 100]`` to match the RapidFuzz convention directly.
+Соглашения по оценкам
+---------------------
+* Функции уровня модуля :func:`fuzzy_score` и :func:`fuzzy_match` используют
+  **float**-оценки в ``[0.0, 1.0]`` для обратной совместимости с пайплайном vision.
+* Новые методы :class:`FuzzyMatcher` (:meth:`~FuzzyMatcher.match`,
+  :meth:`~FuzzyMatcher.best_match`, :meth:`~FuzzyMatcher.contains_fuzzy`) используют
+  **int**-оценки в ``[0, 100]`` в соответствии с соглашением RapidFuzz.
 """
 
 from __future__ import annotations
@@ -23,18 +23,18 @@ from rapidfuzz import process as _process
 
 
 # ---------------------------------------------------------------------------
-# Result type
+# Тип результата
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class FuzzyResult:
-    """A single fuzzy-match result.
+    """Единственный результат нечёткого сопоставления.
 
     Attributes:
-        text: The original candidate string (before any normalisation).
-        score: RapidFuzz similarity score in ``[0, 100]``.
-        original_index: Position of the candidate in the input list.
+        text: Исходная строка-кандидат (до какой-либо нормализации).
+        score: Оценка сходства RapidFuzz в диапазоне ``[0, 100]``.
+        original_index: Позиция кандидата во входном списке.
     """
 
     text: str
@@ -43,23 +43,23 @@ class FuzzyResult:
 
 
 # ---------------------------------------------------------------------------
-# String normalisation
+# Нормализация строк
 # ---------------------------------------------------------------------------
 
 
 def normalise(text: str, lowercase: bool = True, strip_whitespace: bool = True) -> str:
-    """Normalise a string for fuzzy comparison.
+    """Нормализовать строку для нечёткого сравнения.
 
-    Applies Unicode NFC normalisation, optional lowercasing, whitespace
-    collapsing, and removal of common non-semantic characters.
+    Применяет Unicode NFC-нормализацию, опциональное приведение к нижнему регистру,
+    свёртку пробелов и удаление распространённых несемантических символов.
 
     Args:
-        text: Raw input string.
-        lowercase: Convert to lowercase when True.
-        strip_whitespace: Collapse runs of whitespace to single spaces.
+        text: Необработанная входная строка.
+        lowercase: Привести к нижнему регистру при значении True.
+        strip_whitespace: Свернуть последовательности пробелов в одиночный пробел.
 
     Returns:
-        Normalised string.
+        Нормализованная строка.
 
     Example:
         >>> normalise("  Hello\\tWorld!  ")
@@ -73,28 +73,29 @@ def normalise(text: str, lowercase: bool = True, strip_whitespace: bool = True) 
     return text
 
 
-# Alias with English spelling so both names are importable
+# Псевдоним с английским написанием, чтобы оба имени можно было импортировать
 normalize = normalise
 
 
 # ---------------------------------------------------------------------------
-# Module-level convenience functions (float 0-1 scores, backward-compat)
+# Вспомогательные функции уровня модуля (float-оценки 0–1, обратная совместимость)
 # ---------------------------------------------------------------------------
 
 
 def fuzzy_score(query: str, candidate: str, normalise_inputs: bool = True) -> float:
-    """Compute a fuzzy similarity score between *query* and *candidate*.
+    """Вычислить оценку нечёткого сходства между *query* и *candidate*.
 
-    Uses ``rapidfuzz.fuzz.WRatio`` (weighted ratio) which combines partial
-    ratio, token sort ratio, and token set ratio for best real-world results.
+    Использует ``rapidfuzz.fuzz.WRatio`` (взвешенное соотношение), которое
+    объединяет partial ratio, token sort ratio и token set ratio для наилучших
+    результатов на практике.
 
     Args:
-        query: The search string (e.g. from the scenario YAML).
-        candidate: The candidate string (e.g. from OCR output).
-        normalise_inputs: Apply :func:`normalise` to both strings before scoring.
+        query: Строка поиска (например, из YAML сценария).
+        candidate: Строка-кандидат (например, из OCR-вывода).
+        normalise_inputs: Применить :func:`normalise` к обеим строкам перед оценкой.
 
     Returns:
-        Score in the range [0.0, 1.0].
+        Оценка в диапазоне [0.0, 1.0].
     """
     q = normalise(query) if normalise_inputs else query
     c = normalise(candidate) if normalise_inputs else candidate
@@ -107,17 +108,17 @@ def fuzzy_match(
     threshold: float = 0.80,
     normalise_inputs: bool = True,
 ) -> list[tuple[str, float]]:
-    """Find all candidates that fuzzy-match *query* above *threshold*.
+    """Найти все кандидаты, нечётко совпадающие с *query* выше *threshold*.
 
     Args:
-        query: Search string.
-        candidates: List of strings to compare against.
-        threshold: Minimum score (0.0–1.0) to include in results.
-        normalise_inputs: Normalise strings before scoring.
+        query: Строка поиска.
+        candidates: Список строк для сравнения.
+        threshold: Минимальная оценка (0.0–1.0) для включения в результаты.
+        normalise_inputs: Нормализовать строки перед оценкой.
 
     Returns:
-        List of ``(candidate, score)`` tuples sorted by score descending,
-        filtered to entries where score >= threshold.
+        Список кортежей ``(candidate, score)``, отсортированных по убыванию оценки,
+        отфильтрованных по условию score >= threshold.
     """
     if not candidates:
         return []
@@ -133,7 +134,7 @@ def fuzzy_match(
         score_cutoff=cutoff,
         limit=None,
     )
-    # raw items: (matched_text, score, index)
+    # элементы raw: (matched_text, score, index)
     return sorted(
         [(candidates[idx], score / 100.0) for _, score, idx in raw],
         key=lambda t: t[1],
@@ -142,51 +143,51 @@ def fuzzy_match(
 
 
 # ---------------------------------------------------------------------------
-# FuzzyMatcher class
+# Класс FuzzyMatcher
 # ---------------------------------------------------------------------------
 
 
 class FuzzyMatcher:
-    """Stateful fuzzy matcher with configurable thresholds.
+    """Состоятельный нечёткий матчер с настраиваемыми порогами.
 
-    New-style methods (:meth:`match`, :meth:`best_match`, :meth:`contains_fuzzy`)
-    use **int** scores 0–100. Legacy methods (:meth:`score`, :meth:`all_matches`)
-    use float scores 0.0–1.0 for backward compatibility with the vision pipeline.
+    Новые методы (:meth:`match`, :meth:`best_match`, :meth:`contains_fuzzy`)
+    используют **int**-оценки 0–100. Устаревшие методы (:meth:`score`, :meth:`all_matches`)
+    используют float-оценки 0.0–1.0 для обратной совместимости с пайплайном vision.
 
     Attributes:
-        threshold: Default minimum score for new-style methods (0–100).
-        normalise_inputs: Whether to normalise strings before scoring.
+        threshold: Минимальная оценка по умолчанию для новых методов (0–100).
+        normalise_inputs: Нормализовать ли строки перед оценкой.
     """
 
     def __init__(self, threshold: int = 80, normalise_inputs: bool = True) -> None:
-        """Initialize FuzzyMatcher.
+        """Инициализировать FuzzyMatcher.
 
         Args:
-            threshold: Default score threshold (0–100) for :meth:`match` and
+            threshold: Пороговая оценка по умолчанию (0–100) для :meth:`match` и
                 :meth:`best_match`.
-            normalise_inputs: Apply string normalisation before scoring.
+            normalise_inputs: Применять нормализацию строк перед оценкой.
         """
         self.threshold = threshold
         self.normalise_inputs = normalise_inputs
 
     # ------------------------------------------------------------------
-    # Static helper
+    # Статический вспомогательный метод
     # ------------------------------------------------------------------
 
     @staticmethod
     def normalize(text: str) -> str:
-        """Normalise *text* for comparison (lowercase, collapse whitespace).
+        """Нормализовать *text* для сравнения (нижний регистр, свёртка пробелов).
 
         Args:
-            text: Raw input string.
+            text: Необработанная входная строка.
 
         Returns:
-            Normalised string.
+            Нормализованная строка.
         """
         return normalise(text)
 
     # ------------------------------------------------------------------
-    # New-style methods — int scores 0-100
+    # Новые методы — int-оценки 0–100
     # ------------------------------------------------------------------
 
     def match(
@@ -195,18 +196,18 @@ class FuzzyMatcher:
         candidates: list[str],
         threshold: int | None = None,
     ) -> list[FuzzyResult]:
-        """Find all candidates that fuzzy-match *query* above *threshold*.
+        """Найти все кандидаты, нечётко совпадающие с *query* выше *threshold*.
 
-        Uses ``rapidfuzz.fuzz.token_sort_ratio`` for the primary score and
-        ``rapidfuzz.process.extract`` for efficient batch processing.
+        Использует ``rapidfuzz.fuzz.token_sort_ratio`` как основную оценку и
+        ``rapidfuzz.process.extract`` для эффективной пакетной обработки.
 
         Args:
-            query: Search string.
-            candidates: Pool of candidate strings.
-            threshold: Minimum score 0–100 (defaults to :attr:`threshold`).
+            query: Строка поиска.
+            candidates: Пул строк-кандидатов.
+            threshold: Минимальная оценка 0–100 (по умолчанию :attr:`threshold`).
 
         Returns:
-            List of :class:`FuzzyResult` sorted by score descending.
+            Список :class:`FuzzyResult`, отсортированных по убыванию оценки.
         """
         if not candidates:
             return []
@@ -234,16 +235,16 @@ class FuzzyMatcher:
         candidates: list[str],
         threshold: int | None = None,
     ) -> FuzzyResult | None:
-        """Return the best matching candidate above *threshold*.
+        """Вернуть наилучшего кандидата, превышающего *threshold*.
 
         Args:
-            query: Search string.
-            candidates: Pool of candidate strings.
-            threshold: Minimum score 0–100 (defaults to :attr:`threshold`).
+            query: Строка поиска.
+            candidates: Пул строк-кандидатов.
+            threshold: Минимальная оценка 0–100 (по умолчанию :attr:`threshold`).
 
         Returns:
-            :class:`FuzzyResult` for the best match, or None if nothing
-            exceeds the threshold.
+            :class:`FuzzyResult` для наилучшего совпадения, или None, если ни один
+            не превысил порог.
         """
         if not candidates:
             return None
@@ -269,51 +270,51 @@ class FuzzyMatcher:
         substring: str,
         threshold: int = 85,
     ) -> bool:
-        """Check whether *substring* appears inside *text* with fuzzy matching.
+        """Проверить, содержится ли *substring* внутри *text* с нечётким сопоставлением.
 
-        Uses ``rapidfuzz.fuzz.partial_ratio`` which finds the best alignment
-        of the shorter string within the longer one.
+        Использует ``rapidfuzz.fuzz.partial_ratio``, который находит наилучшее
+        выравнивание более короткой строки внутри более длинной.
 
         Args:
-            text: The longer string to search within.
-            substring: The shorter string to search for.
-            threshold: Minimum ``partial_ratio`` score (0–100).
+            text: Более длинная строка, в которой выполняется поиск.
+            substring: Более короткая строка для поиска.
+            threshold: Минимальная оценка ``partial_ratio`` (0–100).
 
         Returns:
-            True when the best partial match score >= *threshold*.
+            True, если оценка наилучшего частичного совпадения >= *threshold*.
         """
         t = normalise(text) if self.normalise_inputs else text
         s = normalise(substring) if self.normalise_inputs else substring
         return int(_fuzz.partial_ratio(s, t)) >= threshold
 
     # ------------------------------------------------------------------
-    # Legacy methods — float scores 0.0-1.0
+    # Устаревшие методы — float-оценки 0.0–1.0
     # ------------------------------------------------------------------
 
     def score(self, query: str, candidate: str) -> float:
-        """Score *query* against a single *candidate*.
+        """Оценить *query* относительно одного *candidate*.
 
         Args:
-            query: Search string.
-            candidate: Candidate to score.
+            query: Строка поиска.
+            candidate: Кандидат для оценки.
 
         Returns:
-            Similarity score in [0.0, 1.0] (WRatio).
+            Оценка сходства в [0.0, 1.0] (WRatio).
         """
         return fuzzy_score(query, candidate, normalise_inputs=self.normalise_inputs)
 
     def all_matches(
         self, query: str, candidates: list[str], threshold: float | None = None
     ) -> list[tuple[str, float]]:
-        """Return all candidates matching *query* above threshold.
+        """Вернуть всех кандидатов, совпадающих с *query* выше порога.
 
         Args:
-            query: Search string.
-            candidates: Pool of candidate strings.
-            threshold: Override instance threshold for this call (0.0–1.0).
+            query: Строка поиска.
+            candidates: Пул строк-кандидатов.
+            threshold: Переопределить порог экземпляра для этого вызова (0.0–1.0).
 
         Returns:
-            Sorted list of ``(candidate, score)`` tuples, scores in [0.0, 1.0].
+            Отсортированный список кортежей ``(candidate, score)``, оценки в [0.0, 1.0].
         """
         t = threshold if threshold is not None else self.threshold / 100.0
         return fuzzy_match(

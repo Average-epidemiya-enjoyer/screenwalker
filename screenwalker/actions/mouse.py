@@ -1,11 +1,10 @@
-"""Mouse action primitives.
+"""Примитивы действий мыши.
 
-Wraps PyAutoGUI to provide typed, cross-platform mouse operations with
-optional human-like jitter (random coordinate offset + pre-action delay).
+Обёртка над PyAutoGUI для типизированных кросс-платформенных операций мыши
+с опциональным человекоподобным джиттером (случайное смещение координат + задержка перед действием).
 
-Implements :class:`~screenwalker.actions.protocols.MouseInputProtocol` so the
-controller can be replaced with an RDP- or VNC-backed implementation without
-changing call sites.
+Реализует :class:`~screenwalker.actions.protocols.MouseInputProtocol`, что позволяет
+заменять контроллер реализацией на базе RDP или VNC без изменения вызывающего кода.
 """
 
 from __future__ import annotations
@@ -22,17 +21,17 @@ logger = structlog.get_logger(__name__)
 
 
 class MouseController:
-    """PyAutoGUI-backed mouse controller with optional humanisation.
+    """Контроллер мыши на базе PyAutoGUI с опциональным очеловечиванием.
 
     Attributes:
-        move_duration: Default mouse move animation duration (seconds).
-        failsafe: Whether PyAutoGUI corner failsafe is active.
-        humanize: When *True*, adds ±*humanize_offset_px* random pixel jitter
-            to coordinates and a random pre-action delay between
-            *humanize_delay_min_ms* and *humanize_delay_max_ms* milliseconds.
-        humanize_offset_px: Maximum random pixel offset (±) per axis.
-        humanize_delay_min_ms: Minimum random pre-action delay in ms.
-        humanize_delay_max_ms: Maximum random pre-action delay in ms.
+        move_duration: Длительность анимации движения мыши по умолчанию (секунды).
+        failsafe: Активен ли угловой failsafe PyAutoGUI.
+        humanize: При значении *True* добавляет случайный джиттер ±*humanize_offset_px*
+            к координатам и случайную задержку перед действием от
+            *humanize_delay_min_ms* до *humanize_delay_max_ms* миллисекунд.
+        humanize_offset_px: Максимальное случайное смещение (±) в пикселях по каждой оси.
+        humanize_delay_min_ms: Минимальная случайная задержка перед действием (мс).
+        humanize_delay_max_ms: Максимальная случайная задержка перед действием (мс).
     """
 
     def __init__(
@@ -44,16 +43,16 @@ class MouseController:
         humanize_delay_min_ms: int = 50,
         humanize_delay_max_ms: int = 150,
     ) -> None:
-        """Initialise MouseController.
+        """Инициализация MouseController.
 
         Args:
-            move_duration: Duration in seconds for smooth mouse movement.
-                Set to 0 for instant movement.
-            failsafe: Enable PyAutoGUI corner failsafe.
-            humanize: Enable random jitter on all actions.
-            humanize_offset_px: Pixel jitter magnitude (±) applied to each axis.
-            humanize_delay_min_ms: Lower bound for random delay.
-            humanize_delay_max_ms: Upper bound for random delay.
+            move_duration: Длительность плавного движения мыши в секундах.
+                Укажите 0 для мгновенного перемещения.
+            failsafe: Включить угловой failsafe PyAutoGUI.
+            humanize: Включить случайный джиттер для всех действий.
+            humanize_offset_px: Величина джиттера (±) в пикселях по каждой оси.
+            humanize_delay_min_ms: Нижняя граница случайной задержки.
+            humanize_delay_max_ms: Верхняя граница случайной задержки.
         """
         self.move_duration = move_duration
         self.failsafe = failsafe
@@ -64,7 +63,7 @@ class MouseController:
         pyautogui.FAILSAFE = failsafe
 
     # ------------------------------------------------------------------
-    # Click actions
+    # Действия клика
     # ------------------------------------------------------------------
 
     def click(
@@ -74,13 +73,13 @@ class MouseController:
         button: str = "left",
         clicks: int = 1,
     ) -> None:
-        """Move to *(x, y)* and click.
+        """Перемещается в *(x, y)* и выполняет клик.
 
         Args:
-            x: Horizontal screen coordinate.
-            y: Vertical screen coordinate.
-            button: Mouse button — ``"left"``, ``"right"``, or ``"middle"``.
-            clicks: Number of clicks to perform.
+            x: Горизонтальная координата экрана.
+            y: Вертикальная координата экрана.
+            button: Кнопка мыши — ``"left"``, ``"right"`` или ``"middle"``.
+            clicks: Количество кликов.
         """
         ax, ay = self._jitter(x, y)
         self._pre_delay()
@@ -94,21 +93,21 @@ class MouseController:
         )
 
     def click_bbox(self, bbox: BBox, button: str = "left") -> None:
-        """Click the centre of a bounding box.
+        """Кликает по центру ограничивающего прямоугольника.
 
         Args:
-            bbox: Target bounding box.
-            button: Mouse button to use.
+            bbox: Целевой ограничивающий прямоугольник.
+            button: Кнопка мыши для клика.
         """
         cx, cy = bbox.center
         self.click(cx, cy, button=button)
 
     def double_click(self, x: int, y: int) -> None:
-        """Double-click at *(x, y)*.
+        """Двойной клик в *(x, y)*.
 
         Args:
-            x: Horizontal screen coordinate.
-            y: Vertical screen coordinate.
+            x: Горизонтальная координата экрана.
+            y: Вертикальная координата экрана.
         """
         ax, ay = self._jitter(x, y)
         self._pre_delay()
@@ -116,25 +115,25 @@ class MouseController:
         pyautogui.doubleClick(ax, ay, duration=self.move_duration)
 
     def right_click(self, x: int, y: int) -> None:
-        """Right-click at *(x, y)*.
+        """Правый клик в *(x, y)*.
 
         Args:
-            x: Horizontal screen coordinate.
-            y: Vertical screen coordinate.
+            x: Горизонтальная координата экрана.
+            y: Вертикальная координата экрана.
         """
         self.click(x, y, button="right")
 
     # ------------------------------------------------------------------
-    # Movement
+    # Перемещение
     # ------------------------------------------------------------------
 
     def move_to(self, x: int, y: int, duration: float | None = None) -> None:
-        """Move the mouse cursor to *(x, y)* without clicking.
+        """Перемещает курсор мыши в *(x, y)* без клика.
 
         Args:
-            x: Target horizontal coordinate.
-            y: Target vertical coordinate.
-            duration: Animation duration in seconds.  Defaults to
+            x: Целевая горизонтальная координата.
+            y: Целевая вертикальная координата.
+            duration: Длительность анимации в секундах. По умолчанию
                 :attr:`move_duration`.
         """
         d = duration if duration is not None else self.move_duration
@@ -144,7 +143,7 @@ class MouseController:
         pyautogui.moveTo(ax, ay, duration=d)
 
     # ------------------------------------------------------------------
-    # Scroll
+    # Прокрутка
     # ------------------------------------------------------------------
 
     def scroll(
@@ -154,16 +153,16 @@ class MouseController:
         clicks: int = 3,
         direction: str = "down",
     ) -> None:
-        """Scroll the mouse wheel at *(x, y)*.
+        """Прокручивает колёсико мыши в *(x, y)*.
 
         Args:
-            x: Horizontal screen coordinate.
-            y: Vertical screen coordinate.
-            clicks: Number of scroll ticks.
-            direction: ``"up"`` or ``"down"``.
+            x: Горизонтальная координата экрана.
+            y: Вертикальная координата экрана.
+            clicks: Количество делений прокрутки.
+            direction: ``"up"`` (вверх) или ``"down"`` (вниз).
 
         Raises:
-            ValueError: If *direction* is not ``"up"`` or ``"down"``.
+            ValueError: Если *direction* не равно ``"up"`` или ``"down"``.
         """
         if direction not in ("up", "down"):
             raise ValueError(f"direction must be 'up' or 'down', got: {direction!r}")
@@ -174,7 +173,7 @@ class MouseController:
         pyautogui.scroll(amount, x=ax, y=ay)
 
     # ------------------------------------------------------------------
-    # Drag
+    # Перетаскивание
     # ------------------------------------------------------------------
 
     def drag(
@@ -186,15 +185,15 @@ class MouseController:
         duration: float = 0.5,
         button: str = "left",
     ) -> None:
-        """Drag from *(start_x, start_y)* to *(end_x, end_y)*.
+        """Перетаскивает из *(start_x, start_y)* в *(end_x, end_y)*.
 
         Args:
-            start_x: Drag start horizontal coordinate.
-            start_y: Drag start vertical coordinate.
-            end_x: Drag end horizontal coordinate.
-            end_y: Drag end vertical coordinate.
-            duration: Total drag animation duration in seconds.
-            button: Mouse button to hold during drag.
+            start_x: Горизонтальная координата начала перетаскивания.
+            start_y: Вертикальная координата начала перетаскивания.
+            end_x: Горизонтальная координата конца перетаскивания.
+            end_y: Вертикальная координата конца перетаскивания.
+            duration: Общая длительность анимации перетаскивания в секундах.
+            button: Кнопка мыши, удерживаемая при перетаскивании.
         """
         asx, asy = self._jitter(start_x, start_y)
         aex, aey = self._jitter(end_x, end_y)
@@ -210,37 +209,37 @@ class MouseController:
         end_x: int,
         end_y: int,
     ) -> None:
-        """Drag from *(start_x, start_y)* to *(end_x, end_y)* at default speed.
+        """Перетаскивает из *(start_x, start_y)* в *(end_x, end_y)* с умолчательной скоростью.
 
-        Convenience alias for :meth:`drag` with default duration.
+        Удобный псевдоним для :meth:`drag` с длительностью по умолчанию.
 
         Args:
-            start_x: Drag start horizontal coordinate.
-            start_y: Drag start vertical coordinate.
-            end_x: Drag end horizontal coordinate.
-            end_y: Drag end vertical coordinate.
+            start_x: Горизонтальная координата начала перетаскивания.
+            start_y: Вертикальная координата начала перетаскивания.
+            end_x: Горизонтальная координата конца перетаскивания.
+            end_y: Вертикальная координата конца перетаскивания.
         """
         self.drag(start_x, start_y, end_x, end_y)
 
     # ------------------------------------------------------------------
-    # Position query
+    # Запрос позиции
     # ------------------------------------------------------------------
 
     def position(self) -> tuple[int, int]:
-        """Return the current mouse cursor position.
+        """Возвращает текущее положение курсора мыши.
 
         Returns:
-            Tuple of *(x, y)* screen coordinates.
+            Кортеж *(x, y)* с координатами экрана.
         """
         pos = pyautogui.position()
         return int(pos.x), int(pos.y)
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Внутренние вспомогательные методы
     # ------------------------------------------------------------------
 
     def _jitter(self, x: int, y: int) -> tuple[int, int]:
-        """Apply random coordinate offset when humanize is enabled."""
+        """Применяет случайное смещение координат при включённом humanize."""
         if not self.humanize:
             return x, y
         dx = random.randint(-self.humanize_offset_px, self.humanize_offset_px)
@@ -248,7 +247,7 @@ class MouseController:
         return x + dx, y + dy
 
     def _pre_delay(self) -> None:
-        """Sleep a random interval before an action when humanize is enabled."""
+        """Делает случайную паузу перед действием при включённом humanize."""
         if not self.humanize:
             return
         delay = (

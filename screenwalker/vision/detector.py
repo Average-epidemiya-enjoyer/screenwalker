@@ -1,28 +1,28 @@
-"""YOLO-based UI element detector.
+"""Детектор UI-элементов на основе YOLO.
 
-Three variants are available, selected automatically by :func:`create_detector`:
+Доступны три варианта, выбираемые автоматически функцией :func:`create_detector`:
 
-* **UIElementDetector** — wraps any YOLO-compatible model (OmniParser V2,
-  fine-tuned YOLOv8n, or any ``ultralytics``-compatible weights).  Requires
-  the ``yolo`` extra: ``pip install screenwalker[yolo]``.
+* **UIElementDetector** — обёртка над любой YOLO-совместимой моделью (OmniParser V2,
+  дообученный YOLOv8n или любые веса, совместимые с ``ultralytics``).  Требует
+  дополнительного пакета ``yolo``: ``pip install screenwalker[yolo]``.
 
-* **NullDetector** — returns empty results with no dependencies.  Used when
-  no model is configured or ``ultralytics`` is not installed.
+* **NullDetector** — возвращает пустые результаты без каких-либо зависимостей.
+  Используется, если модель не настроена или ``ultralytics`` не установлен.
 
-Recommended model: **OmniParser V2** from Hugging Face
+Рекомендуемая модель: **OmniParser V2** с Hugging Face
 (``microsoft/OmniParser-v2.0``, ``icon_detect/best.pt``).
-Download with ``python scripts/download_model.py``.
+Загрузка: ``python scripts/download_model.py``.
 
-Custom fine-tuning: ``python scripts/train_detector.py``.
+Дообучение на своих данных: ``python scripts/train_detector.py``.
 
-Class normalisation
--------------------
-Raw YOLO class names are normalised to a canonical set of UI element types:
+Нормализация классов
+--------------------
+Сырые имена классов YOLO приводятся к каноническому набору типов UI-элементов:
 
     ``button``, ``text_field``, ``icon``, ``checkbox``, ``radio_button``,
     ``dropdown``, ``link``, ``image``, ``label``, ``toggle``, ``slider``
 
-Unknown class names are kept as-is.
+Неизвестные имена классов сохраняются как есть.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Class taxonomy — raw model names → canonical UI element type
+# Таксономия классов — сырые имена модели → канонический тип UI-элемента
 # ---------------------------------------------------------------------------
 
 UI_CLASS_ALIASES: dict[str, list[str]] = {
@@ -59,25 +59,25 @@ UI_CLASS_ALIASES: dict[str, list[str]] = {
     "slider": ["slider", "range", "seekbar", "progress"],
 }
 
-# Reverse lookup: raw/alias → canonical
+# Обратная таблица поиска: псевдоним/сырое имя → канонический тип
 _ALIAS_TO_CANONICAL: dict[str, str] = {
     alias.lower(): canonical
     for canonical, aliases in UI_CLASS_ALIASES.items()
     for alias in aliases
 }
-# The canonical names themselves also map to themselves
+# Канонические имена также отображаются сами на себя
 for _c in list(UI_CLASS_ALIASES):
     _ALIAS_TO_CANONICAL[_c] = _c
 
 
 def normalise_class(raw: str) -> str:
-    """Map a raw model class name to its canonical UI element type.
+    """Привести сырое имя класса модели к каноническому типу UI-элемента.
 
     Args:
-        raw: Class name as returned by the model (e.g. ``"btn"``, ``"input"``).
+        raw: Имя класса, возвращённое моделью (например, ``"btn"``, ``"input"``).
 
     Returns:
-        Canonical type string, or *raw* if no mapping is known.
+        Строка канонического типа или *raw*, если соответствие не найдено.
     """
     return _ALIAS_TO_CANONICAL.get(raw.lower().strip(), raw.lower().strip())
 
@@ -89,12 +89,12 @@ def normalise_class(raw: str) -> str:
 
 @dataclass(frozen=True)
 class DetectionResult:
-    """A single UI element detection.
+    """Единичный результат обнаружения UI-элемента.
 
     Attributes:
-        class_name: Canonical UI element type (``"button"``, ``"text_field"``, …).
-        confidence: Model confidence in ``[0.0, 1.0]``.
-        bbox: Bounding box in screen coordinates.
+        class_name: Канонический тип UI-элемента (``"button"``, ``"text_field"``, …).
+        confidence: Уверенность модели в диапазоне ``[0.0, 1.0]``.
+        bbox: Ограничивающий прямоугольник в экранных координатах.
     """
 
     class_name: str
@@ -103,14 +103,14 @@ class DetectionResult:
 
     @property
     def center(self) -> tuple[int, int]:
-        """Pixel coordinates of the detection centre."""
+        """Пиксельные координаты центра обнаруженного элемента."""
         return self.bbox.center
 
     def to_find_result(self) -> FindResult:
-        """Convert to a :class:`~screenwalker.vision.screen_state.FindResult`.
+        """Преобразовать в :class:`~screenwalker.vision.screen_state.FindResult`.
 
         Returns:
-            FindResult with method ``"yolo"`` and element equal to class_name.
+            FindResult с методом ``"yolo"`` и элементом, равным class_name.
         """
         return FindResult(
             element=self.class_name,
@@ -127,17 +127,16 @@ class DetectionResult:
 
 
 class UIElementDetector:
-    """Detect UI elements using a YOLO-compatible model.
+    """Обнаружение UI-элементов с помощью YOLO-совместимой модели.
 
-    Supports any ``ultralytics``-compatible weights file, including
-    OmniParser V2 and custom fine-tuned YOLOv8 models.
+    Поддерживает любой файл весов, совместимый с ``ultralytics``, включая
+    OmniParser V2 и кастомные дообученные модели YOLOv8.
 
     Attributes:
-        model_path: Path to the ``*.pt`` weights file, or ``None`` for
-            no-op mode.
-        confidence_threshold: Minimum detection confidence (0.0–1.0).
-        class_names: Mapping ``{class_index → raw_class_name}`` read from the
-            loaded model.
+        model_path: Путь к файлу весов ``*.pt`` или ``None`` для режима заглушки.
+        confidence_threshold: Минимальная уверенность обнаружения (0.0–1.0).
+        class_names: Словарь ``{индекс_класса → сырое_имя_класса}``,
+            считанный из загруженной модели.
     """
 
     def __init__(
@@ -145,16 +144,15 @@ class UIElementDetector:
         model_path: Path | str | None = None,
         confidence_threshold: float = 0.50,
     ) -> None:
-        """Initialise the detector.
+        """Инициализировать детектор.
 
-        Does **not** fail if ``ultralytics`` is not installed — the
-        ``available`` property will return ``False`` and all find calls
-        will return empty results.
+        Не падает, если ``ultralytics`` не установлен — свойство ``available``
+        вернёт ``False``, а все вызовы find будут возвращать пустые результаты.
 
         Args:
-            model_path: Path to YOLO weights (``*.pt``).  ``None`` keeps the
-                detector in no-op mode.
-            confidence_threshold: Minimum confidence to accept a detection.
+            model_path: Путь к весам YOLO (``*.pt``).  ``None`` оставляет
+                детектор в режиме заглушки.
+            confidence_threshold: Минимальная уверенность для принятия обнаружения.
         """
         self.model_path: Path | None = Path(model_path) if model_path else None
         self.confidence_threshold = confidence_threshold
@@ -166,19 +164,19 @@ class UIElementDetector:
 
     @property
     def available(self) -> bool:
-        """``True`` if a model is loaded and inference can run."""
+        """``True`` если модель загружена и инференс возможен."""
         return self._model is not None
 
     # ------------------------------------------------------------------
-    # Model loading
+    # Загрузка модели
     # ------------------------------------------------------------------
 
     def _load_model(self) -> None:
-        """Load the YOLO model from :attr:`model_path`.
+        """Загрузить YOLO-модель из :attr:`model_path`.
 
         Raises:
-            ImportError: If ``ultralytics`` is not installed.
-            FileNotFoundError: If the weights file does not exist.
+            ImportError: Если ``ultralytics`` не установлен.
+            FileNotFoundError: Если файл весов не существует.
         """
         if self.model_path is None:
             return
@@ -199,7 +197,7 @@ class UIElementDetector:
         self.class_names = dict(self._model.names)
 
     # ------------------------------------------------------------------
-    # Core inference
+    # Основной инференс
     # ------------------------------------------------------------------
 
     def detect(
@@ -207,17 +205,16 @@ class UIElementDetector:
         screenshot: Image.Image,
         region: BBox | None = None,
     ) -> list[DetectionResult]:
-        """Detect all UI elements in *screenshot*.
+        """Обнаружить все UI-элементы на *screenshot*.
 
         Args:
-            screenshot: Full-screen or cropped PIL image.
-            region: Optional bounding box restricting the inference area.
-                Returned bounding boxes are translated back to full-image
-                coordinates.
+            screenshot: Полноэкранное или обрезанное PIL-изображение.
+            region: Необязательный BBox, ограничивающий область инференса.
+                Возвращаемые BBox переводятся обратно в координаты полного изображения.
 
         Returns:
-            List of :class:`DetectionResult` sorted by confidence descending.
-            Empty if the model is not available.
+            Список :class:`DetectionResult`, отсортированный по убыванию уверенности.
+            Пустой, если модель недоступна.
         """
         if not self.available:
             return []
@@ -267,7 +264,7 @@ class UIElementDetector:
         return sorted(detections, key=lambda d: d.confidence, reverse=True)
 
     # ------------------------------------------------------------------
-    # Filtered search
+    # Поиск с фильтрацией
     # ------------------------------------------------------------------
 
     def find_by_class(
@@ -276,18 +273,18 @@ class UIElementDetector:
         element_class: str,
         region: BBox | None = None,
     ) -> list[DetectionResult]:
-        """Detect all elements of a specific UI class.
+        """Обнаружить все элементы заданного UI-класса.
 
-        Both the raw model class name and the canonical alias are checked,
-        so ``"btn"`` and ``"button"`` both match a button.
+        Проверяются как сырое имя класса модели, так и канонический псевдоним,
+        поэтому ``"btn"`` и ``"button"`` одинаково соответствуют кнопке.
 
         Args:
-            screenshot: Screenshot to analyse.
-            element_class: UI element type to filter for (e.g. ``"button"``).
-            region: Optional search region.
+            screenshot: Скриншот для анализа.
+            element_class: Тип UI-элемента для фильтрации (например, ``"button"``).
+            region: Необязательная область поиска.
 
         Returns:
-            Matching detections sorted by confidence descending.
+            Совпадающие обнаружения, отсортированные по убыванию уверенности.
         """
         canonical_target = normalise_class(element_class)
         all_detections = self.detect(screenshot, region=region)
@@ -304,41 +301,40 @@ class UIElementDetector:
         anchor_text: str,
         ocr_engine: Any,
     ) -> DetectionResult | None:
-        """Find the UI element of *element_class* nearest to *anchor_text*.
+        """Найти UI-элемент типа *element_class*, ближайший к *anchor_text*.
 
-        Use case: locate the ``"button"`` closest to the text
-        ``"Confirm deletion?"`` to click the right OK button in a dialog.
+        Сценарий использования: найти ``"button"``, ближайшую к тексту
+        ``"Confirm deletion?"`` чтобы нажать правильную кнопку OK в диалоге.
 
-        Steps:
+        Шаги:
 
-        1. Run OCR to locate *anchor_text* and get its centre coordinates.
-        2. Detect all elements of *element_class* via YOLO.
-        3. Return the detection with the smallest Euclidean distance from the
-           anchor text centre.
+        1. Запустить OCR для нахождения *anchor_text* и получения координат его центра.
+        2. Обнаружить все элементы типа *element_class* через YOLO.
+        3. Вернуть обнаружение с наименьшим евклидовым расстоянием от центра
+           опорного текста.
 
         Args:
-            screenshot: Screenshot to search.
-            element_class: UI element type (e.g. ``"button"``).
-            anchor_text: Text to use as a spatial reference point.
-            ocr_engine: An OCR engine implementing ``find_text(image, query)``.
+            screenshot: Скриншот для поиска.
+            element_class: Тип UI-элемента (например, ``"button"``).
+            anchor_text: Текст, используемый как пространственная точка привязки.
+            ocr_engine: OCR-движок, реализующий ``find_text(image, query)``.
 
         Returns:
-            :class:`DetectionResult` for the nearest matching element, or
-            ``None`` if either the anchor text or any matching element is
-            not found.
+            :class:`DetectionResult` для ближайшего совпадающего элемента или
+            ``None``, если опорный текст или подходящий элемент не найден.
         """
-        # Step 1 — find anchor text position via OCR
+        # Шаг 1 — найти позицию опорного текста через OCR
         anchor_result = ocr_engine.find_text(screenshot, anchor_text)
         if anchor_result is None:
             return None
         anchor_cx, anchor_cy = anchor_result.bbox.center
 
-        # Step 2 — detect elements of the requested class
+        # Шаг 2 — обнаружить элементы запрошенного класса
         candidates = self.find_by_class(screenshot, element_class)
         if not candidates:
             return None
 
-        # Step 3 — return closest by Euclidean distance
+        # Шаг 3 — вернуть ближайший по евклидовому расстоянию
         def _dist(det: DetectionResult) -> float:
             ex, ey = det.center
             return math.sqrt((ex - anchor_cx) ** 2 + (ey - anchor_cy) ** 2)
@@ -346,7 +342,7 @@ class UIElementDetector:
         return min(candidates, key=_dist)
 
     # ------------------------------------------------------------------
-    # Finder Protocol implementation
+    # Реализация протокола Finder
     # ------------------------------------------------------------------
 
     def find(
@@ -356,26 +352,26 @@ class UIElementDetector:
         threshold: float | None = None,
         region: BBox | None = None,
     ) -> FindResult | None:
-        """Return the best-matching detection as a :class:`FindResult`.
+        """Вернуть лучшее обнаружение в виде :class:`FindResult`.
 
-        Implements the :class:`~screenwalker.vision.screen_state.Finder`
-        protocol so the engine can use this detector interchangeably with
-        OCR and template finders.
+        Реализует протокол :class:`~screenwalker.vision.screen_state.Finder`,
+        чтобы движок мог использовать этот детектор взаимозаменяемо с
+        OCR- и template-поисковиками.
 
         Args:
-            image: Screenshot to search.
-            query: UI class label to search for (e.g. ``"button"``).
-            threshold: Override :attr:`confidence_threshold` for this call.
-            region: Optional search region.
+            image: Скриншот для поиска.
+            query: Метка UI-класса для поиска (например, ``"button"``).
+            threshold: Переопределить :attr:`confidence_threshold` для этого вызова.
+            region: Необязательная область поиска.
 
         Returns:
-            :class:`FindResult` for the best detection, or ``None``.
+            :class:`FindResult` для лучшего обнаружения или ``None``.
         """
         cutoff = threshold if threshold is not None else self.confidence_threshold
         results = self.find_by_class(image, query, region=region)
         if not results:
             return None
-        best = results[0]  # already sorted by confidence
+        best = results[0]  # уже отсортированы по уверенности
         if best.confidence < cutoff:
             return None
         return best.to_find_result()
@@ -387,16 +383,16 @@ class UIElementDetector:
         threshold: float | None = None,
         region: BBox | None = None,
     ) -> list[FindResult]:
-        """Return all matching detections as :class:`FindResult` objects.
+        """Вернуть все совпадающие обнаружения в виде объектов :class:`FindResult`.
 
         Args:
-            image: Screenshot to search.
-            query: UI class label.
-            threshold: Override :attr:`confidence_threshold` for this call.
-            region: Optional search region.
+            image: Скриншот для поиска.
+            query: Метка UI-класса.
+            threshold: Переопределить :attr:`confidence_threshold` для этого вызова.
+            region: Необязательная область поиска.
 
         Returns:
-            List of :class:`FindResult` sorted by confidence descending.
+            Список :class:`FindResult`, отсортированный по убыванию уверенности.
         """
         cutoff = threshold if threshold is not None else self.confidence_threshold
         results = self.find_by_class(image, query, region=region)
@@ -407,40 +403,40 @@ class UIElementDetector:
         ]
 
     def detect_all(self, image: Image.Image) -> list[DetectionResult]:
-        """Detect every UI element visible in *image* regardless of class.
+        """Обнаружить все UI-элементы, видимые на *image*, независимо от класса.
 
-        Useful for exploratory automation and screen-state identification.
+        Полезно для исследовательской автоматизации и идентификации состояния экрана.
 
         Args:
-            image: Screenshot to analyse.
+            image: Скриншот для анализа.
 
         Returns:
-            All detected elements sorted by confidence descending.
+            Все обнаруженные элементы, отсортированные по убыванию уверенности.
         """
         return self.detect(image)
 
 
 # ---------------------------------------------------------------------------
-# NullDetector — no-op fallback
+# NullDetector — заглушка на случай отсутствия модели
 # ---------------------------------------------------------------------------
 
 
 class NullDetector:
-    """No-op detector that always returns empty results.
+    """Детектор-заглушка, всегда возвращающий пустые результаты.
 
-    Used when no model is configured or ``ultralytics`` is not installed.
-    Satisfies the same interface as :class:`UIElementDetector`.
+    Используется, если модель не настроена или ``ultralytics`` не установлен.
+    Реализует тот же интерфейс, что и :class:`UIElementDetector`.
 
     Attributes:
-        available: Always ``False``.
-        class_names: Always empty.
+        available: Всегда ``False``.
+        class_names: Всегда пустой.
     """
 
     available: bool = False
     class_names: dict[int, str] = {}
 
     def detect(self, screenshot: Image.Image, region: BBox | None = None) -> list[DetectionResult]:
-        """Return an empty list (no model loaded)."""
+        """Вернуть пустой список (модель не загружена)."""
         return []
 
     def find_by_class(
@@ -449,7 +445,7 @@ class NullDetector:
         element_class: str,
         region: BBox | None = None,
     ) -> list[DetectionResult]:
-        """Return an empty list (no model loaded)."""
+        """Вернуть пустой список (модель не загружена)."""
         return []
 
     def find_nearest(
@@ -459,7 +455,7 @@ class NullDetector:
         anchor_text: str,
         ocr_engine: Any,
     ) -> DetectionResult | None:
-        """Return ``None`` (no model loaded)."""
+        """Вернуть ``None`` (модель не загружена)."""
         return None
 
     def find(
@@ -469,7 +465,7 @@ class NullDetector:
         threshold: float | None = None,
         region: BBox | None = None,
     ) -> FindResult | None:
-        """Return ``None`` (no model loaded)."""
+        """Вернуть ``None`` (модель не загружена)."""
         return None
 
     def find_all(
@@ -479,38 +475,38 @@ class NullDetector:
         threshold: float | None = None,
         region: BBox | None = None,
     ) -> list[FindResult]:
-        """Return an empty list (no model loaded)."""
+        """Вернуть пустой список (модель не загружена)."""
         return []
 
     def detect_all(self, image: Image.Image) -> list[DetectionResult]:
-        """Return an empty list (no model loaded)."""
+        """Вернуть пустой список (модель не загружена)."""
         return []
 
 
 # ---------------------------------------------------------------------------
-# Factory
+# Фабрика
 # ---------------------------------------------------------------------------
 
 
 def create_detector(config: Any) -> UIElementDetector | NullDetector:
-    """Create a detector from :class:`~screenwalker.utils.config.VisionConfig`.
+    """Создать детектор на основе :class:`~screenwalker.utils.config.VisionConfig`.
 
-    Selection logic:
+    Логика выбора:
 
-    1. If ``config.yolo_enabled`` is ``False`` → return :class:`NullDetector`.
-    2. If ``config.yolo_model_path`` is set and the file exists →
-       return :class:`UIElementDetector` with that path.
-    3. If the default OmniParser path
-       (``models/icon_detect/best.pt``) exists → use it.
-    4. Otherwise → return :class:`NullDetector` and log a warning.
+    1. Если ``config.yolo_enabled`` равно ``False`` → вернуть :class:`NullDetector`.
+    2. Если ``config.yolo_model_path`` задан и файл существует →
+       вернуть :class:`UIElementDetector` с этим путём.
+    3. Если путь по умолчанию к OmniParser
+       (``models/icon_detect/best.pt``) существует → использовать его.
+    4. Иначе → вернуть :class:`NullDetector` и записать предупреждение в лог.
 
     Args:
-        config: A :class:`~screenwalker.utils.config.VisionConfig` (or any
-            object with ``yolo_enabled``, ``yolo_model_path``,
-            ``yolo_confidence`` attributes).
+        config: Экземпляр :class:`~screenwalker.utils.config.VisionConfig` (или любой
+            объект с атрибутами ``yolo_enabled``, ``yolo_model_path``,
+            ``yolo_confidence``).
 
     Returns:
-        A ready-to-use detector (or :class:`NullDetector` if unavailable).
+        Готовый к использованию детектор (или :class:`NullDetector`, если недоступен).
     """
     import structlog as _sl
     _log = _sl.get_logger(__name__)
@@ -520,7 +516,7 @@ def create_detector(config: Any) -> UIElementDetector | NullDetector:
 
     confidence = getattr(config, "yolo_confidence", 0.50)
 
-    # Explicit model path from config
+    # Явный путь к модели из конфига
     model_path_raw: str | None = getattr(config, "yolo_model_path", None)
     if model_path_raw:
         model_path = Path(model_path_raw)
@@ -536,7 +532,7 @@ def create_detector(config: Any) -> UIElementDetector | NullDetector:
         else:
             _log.warning("YOLO model not found", path=str(model_path))
 
-    # Default OmniParser location
+    # Путь по умолчанию для OmniParser
     default_path = Path("models/icon_detect/best.pt")
     if default_path.exists():
         try:
@@ -555,8 +551,8 @@ def create_detector(config: Any) -> UIElementDetector | NullDetector:
 
 
 # ---------------------------------------------------------------------------
-# Backward-compatible alias
+# Псевдоним для обратной совместимости
 # ---------------------------------------------------------------------------
 
-#: Alias kept for existing call sites that reference YOLODetector by name.
+#: Псевдоним для существующих мест вызова, использующих имя YOLODetector.
 YOLODetector = UIElementDetector

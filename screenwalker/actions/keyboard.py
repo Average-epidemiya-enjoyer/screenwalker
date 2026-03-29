@@ -1,12 +1,11 @@
-"""Keyboard action primitives.
+"""Примитивы действий клавиатуры.
 
-Wraps PyAutoGUI to provide cross-platform text input and hotkey support.
-Cyrillic and other non-ASCII text is routed through the clipboard to avoid
-PyAutoGUI's ASCII-only ``typewrite`` limitation.
+Обёртка над PyAutoGUI для кросс-платформенного ввода текста и поддержки горячих клавиш.
+Кириллица и другой не-ASCII текст направляется через буфер обмена для обхода
+ограничения PyAutoGUI (``typewrite`` работает только с ASCII).
 
-Implements :class:`~screenwalker.actions.protocols.KeyboardInputProtocol` so
-the controller can be replaced with an RDP-backed implementation without
-changing call sites.
+Реализует :class:`~screenwalker.actions.protocols.KeyboardInputProtocol`, что позволяет
+заменять контроллер реализацией на базе RDP без изменения вызывающего кода.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Mapping from common alias names to PyAutoGUI key names
+# Сопоставление псевдонимов с именами клавиш PyAutoGUI
 _KEY_ALIASES: dict[str, str] = {
     "return": "enter",
     "esc": "escape",
@@ -36,53 +35,53 @@ _PLATFORM = platform.system()
 
 
 def _normalise_key(key: str) -> str:
-    """Map an alias to the canonical PyAutoGUI key name.
+    """Сопоставляет псевдоним с каноническим именем клавиши PyAutoGUI.
 
     Args:
-        key: Raw key name from the scenario YAML.
+        key: Сырое имя клавиши из YAML-сценария.
 
     Returns:
-        Canonical PyAutoGUI key string.
+        Каноническое имя клавиши PyAutoGUI.
     """
     return _KEY_ALIASES.get(key.lower(), key.lower())
 
 
 def _has_non_ascii(text: str) -> bool:
-    """Return True if *text* contains any character outside printable ASCII."""
+    """Возвращает True, если *text* содержит символы вне печатного ASCII."""
     return any(ord(c) > 127 for c in text)
 
 
 class KeyboardController:
-    """PyAutoGUI-backed keyboard controller with Cyrillic support.
+    """Контроллер клавиатуры на базе PyAutoGUI с поддержкой кириллицы.
 
-    Cyrillic (and any non-ASCII) text is typed via clipboard paste so that
-    platform input method restrictions in ``pyautogui.typewrite`` are bypassed.
+    Кириллический (и любой не-ASCII) текст вводится через вставку из буфера обмена,
+    чтобы обойти ограничения платформенных методов ввода в ``pyautogui.typewrite``.
 
     Attributes:
-        typing_interval: Delay between keystrokes when typing (seconds).
+        typing_interval: Задержка между нажатиями клавиш при вводе (секунды).
     """
 
     def __init__(self, typing_interval: float = 0.03) -> None:
-        """Initialise KeyboardController.
+        """Инициализация KeyboardController.
 
         Args:
-            typing_interval: Seconds between individual key presses when typing.
+            typing_interval: Задержка между отдельными нажатиями клавиш при вводе текста.
         """
         self.typing_interval = typing_interval
 
     # ------------------------------------------------------------------
-    # Text input
+    # Ввод текста
     # ------------------------------------------------------------------
 
     def type_text(self, text: str, interval: float | None = None) -> None:
-        """Type *text* character by character.
+        """Вводит *text* посимвольно.
 
-        Non-ASCII characters (Cyrillic, CJK, etc.) are inserted via
-        :meth:`type_unicode` instead of ``pyautogui.typewrite``.
+        Не-ASCII символы (кириллица, CJK и т.д.) вставляются через
+        :meth:`type_unicode` вместо ``pyautogui.typewrite``.
 
         Args:
-            text: Text to type. Supports printable ASCII and Unicode.
-            interval: Override typing interval for this call.
+            text: Текст для ввода. Поддерживает печатный ASCII и Unicode.
+            interval: Переопределяет интервал ввода для этого вызова.
         """
         iv = interval if interval is not None else self.typing_interval
         logger.debug("Type text", length=len(text), has_unicode=_has_non_ascii(text))
@@ -92,14 +91,14 @@ class KeyboardController:
             pyautogui.typewrite(text, interval=iv)
 
     def type_unicode(self, text: str) -> None:
-        """Insert Unicode text via clipboard paste (Ctrl+V / Cmd+V).
+        """Вставляет Unicode-текст через буфер обмена (Ctrl+V / Cmd+V).
 
-        Writes *text* to the system clipboard and then sends the platform
-        paste shortcut.  This is the only reliable way to input non-ASCII
-        characters through PyAutoGUI.
+        Записывает *text* в системный буфер обмена и затем отправляет
+        платформенное сочетание вставки. Это единственный надёжный способ
+        ввода не-ASCII символов через PyAutoGUI.
 
         Args:
-            text: Unicode string to insert at the current cursor position.
+            text: Unicode-строка для вставки в текущую позицию курсора.
         """
         logger.debug("Type unicode via clipboard", length=len(text))
         pyperclip.copy(text)
@@ -109,15 +108,15 @@ class KeyboardController:
             pyautogui.hotkey("ctrl", "v")
 
     # ------------------------------------------------------------------
-    # Hotkeys / single keys
+    # Горячие клавиши / одиночные клавиши
     # ------------------------------------------------------------------
 
     def hotkey(self, *keys: str) -> None:
-        """Press a key combination simultaneously.
+        """Нажимает комбинацию клавиш одновременно.
 
         Args:
-            *keys: Key names to press together (e.g. ``"ctrl", "s"``).
-                Keys are normalised via :func:`_normalise_key`.
+            *keys: Имена клавиш для одновременного нажатия (например, ``"ctrl", "s"``).
+                Клавиши нормализуются через :func:`_normalise_key`.
 
         Example:
             >>> kb = KeyboardController()
@@ -128,47 +127,47 @@ class KeyboardController:
         pyautogui.hotkey(*normalised)
 
     def press(self, key: str) -> None:
-        """Press and release a single key.
+        """Нажимает и отпускает одну клавишу.
 
         Args:
-            key: Key name (will be normalised via :func:`_normalise_key`).
+            key: Имя клавиши (будет нормализовано через :func:`_normalise_key`).
         """
         normalised = _normalise_key(key)
         logger.debug("Key press", key=normalised)
         pyautogui.press(normalised)
 
     def key_down(self, key: str) -> None:
-        """Hold a key down without releasing.
+        """Удерживает клавишу нажатой без отпускания.
 
         Args:
-            key: Key name (will be normalised).
+            key: Имя клавиши (будет нормализовано).
         """
         normalised = _normalise_key(key)
         logger.debug("Key down", key=normalised)
         pyautogui.keyDown(normalised)
 
     def key_up(self, key: str) -> None:
-        """Release a previously held key.
+        """Отпускает ранее удерживаемую клавишу.
 
         Args:
-            key: Key name (will be normalised).
+            key: Имя клавиши (будет нормализовано).
         """
         normalised = _normalise_key(key)
         logger.debug("Key up", key=normalised)
         pyautogui.keyUp(normalised)
 
     # ------------------------------------------------------------------
-    # Compound helpers
+    # Составные вспомогательные методы
     # ------------------------------------------------------------------
 
     def select_all(self) -> None:
-        """Send Ctrl+A (or Cmd+A on macOS) to select all text."""
+        """Отправляет Ctrl+A (или Cmd+A на macOS) для выделения всего текста."""
         if _PLATFORM == "Darwin":
             self.hotkey("command", "a")
         else:
             self.hotkey("ctrl", "a")
 
     def clear_field(self) -> None:
-        """Select all text in the focused field and delete it."""
+        """Выделяет весь текст в активном поле и удаляет его."""
         self.select_all()
         self.press("delete")

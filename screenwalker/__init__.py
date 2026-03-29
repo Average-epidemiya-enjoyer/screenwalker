@@ -1,7 +1,7 @@
-"""ScreenWalker — vision-based RPA framework.
+"""ScreenWalker — фреймворк для RPA на основе компьютерного зрения.
 
-Automate any UI application by interacting with it through screenshots,
-OCR, and template matching — no DOM access or API hooks required.
+Автоматизирует любое UI-приложение через скриншоты, OCR и template matching —
+без доступа к DOM или API-хуков.
 
 Example:
     >>> from screenwalker.core.engine import ScenarioEngine

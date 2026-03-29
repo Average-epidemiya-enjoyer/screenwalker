@@ -1,22 +1,22 @@
-"""Step logger — records each step execution with JSONL metadata and screenshots.
+"""Логгер шагов — записывает выполнение каждого шага с JSONL-метаданными и скриншотами.
 
-Each run produces a directory like::
+Каждый запуск создаёт директорию вида::
 
     logs/2024-01-15_14-30-00_create_ticket/
-        steps.jsonl           ← one JSON object per line
+        steps.jsonl           ← один JSON-объект на строку
         screenshots/
             step_001_before.png
             step_001_after.png
             step_002_before.png
             ...
 
-Two complementary APIs are provided:
+Предоставляются два взаимодополняющих API:
 
-* :meth:`StepLogger.log_step` — backward-compatible; accepts the engine's
-  :class:`~screenwalker.core.context.StepRecord` and extracts vision metadata
-  from its ``metadata`` dict.
-* :meth:`StepLogger.log_result` — richer API that accepts a fully-populated
-  :class:`StepResult` with explicit vision fields.
+* :meth:`StepLogger.log_step` — обратно совместимый; принимает
+  :class:`~screenwalker.core.context.StepRecord` движка и извлекает
+  метаданные vision из словаря ``metadata``.
+* :meth:`StepLogger.log_result` — расширенный API, принимающий полностью
+  заполненный :class:`StepResult` с явными полями vision.
 """
 
 from __future__ import annotations
@@ -36,29 +36,29 @@ _log = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# StepResult — rich step record for JSONL serialisation
+# StepResult — расширенная запись шага для JSONL-сериализации
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class StepResult:
-    """Rich record of a completed step for JSONL logging.
+    """Расширенная запись выполненного шага для JSONL-логирования.
 
     Attributes:
-        step_id: Identifier of the step.
-        scenario: Name of the parent scenario.
-        action: Action performed (e.g. ``"click"``, ``"type"``).
-        success: Whether the step completed without error.
-        duration_ms: Wall-clock execution time in milliseconds.
-        timestamp: ISO-8601 UTC timestamp of execution.
-        find_target: Text / template / label that was searched for.
-        method_used: Vision method that located the element
+        step_id: Идентификатор шага.
+        scenario: Название родительского сценария.
+        action: Выполненное действие (например, ``"click"``, ``"type"``).
+        success: Завершился ли шаг без ошибки.
+        duration_ms: Фактическое время выполнения в миллисекундах.
+        timestamp: ISO-8601 UTC временная метка выполнения.
+        find_target: Текст / шаблон / метка, по которым выполнялся поиск.
+        method_used: Метод vision, нашедший элемент
             (``ocr`` / ``template`` / ``yolo`` / ``cache``).
-        confidence: Match confidence in ``[0.0, 1.0]``.
-        bbox: Bounding box ``(x, y, w, h)`` of the found element.
-        found_text: Actual text returned by OCR (may differ from
-            *find_target* when fuzzy matching is active).
-        error: Error message if the step failed.
+        confidence: Уверенность совпадения в диапазоне ``[0.0, 1.0]``.
+        bbox: Ограничивающий прямоугольник ``(x, y, w, h)`` найденного элемента.
+        found_text: Фактический текст, возвращённый OCR (может отличаться от
+            *find_target* при активном нечётком сопоставлении).
+        error: Сообщение об ошибке, если шаг завершился неудачей.
     """
 
     step_id: str
@@ -81,13 +81,13 @@ class StepResult:
 
 
 class StepLogger:
-    """Logs step execution records to a per-run JSONL file with screenshots.
+    """Записывает результаты выполнения шагов в JSONL-файл со скриншотами.
 
     Attributes:
-        output_dir: Root directory for the current run (created lazily).
-        save_screenshots: Persist before/after screenshots for every step.
-        save_on_failure: Always save a screenshot when a step fails, even if
-            *save_screenshots* is ``False``.
+        output_dir: Корневая директория текущего запуска (создаётся лениво).
+        save_screenshots: Сохранять скриншоты до/после для каждого шага.
+        save_on_failure: Всегда сохранять скриншот при неудаче шага, даже если
+            *save_screenshots* равно ``False``.
     """
 
     def __init__(
@@ -96,13 +96,13 @@ class StepLogger:
         save_screenshots: bool = True,
         save_on_failure: bool = True,
     ) -> None:
-        """Initialise StepLogger.
+        """Инициализировать StepLogger.
 
         Args:
-            output_dir: Per-run output directory (e.g.
+            output_dir: Директория вывода для текущего запуска (например,
                 ``logs/2024-01-15_14-30-00_create_ticket``).
-            save_screenshots: Save PNG screenshots for every step.
-            save_on_failure: Override *save_screenshots* for failed steps.
+            save_screenshots: Сохранять PNG-скриншоты для каждого шага.
+            save_on_failure: Переопределить *save_screenshots* для неудавшихся шагов.
         """
         self.output_dir = Path(output_dir)
         self.save_screenshots = save_screenshots
@@ -111,21 +111,21 @@ class StepLogger:
         self._scenario_name: str = ""
 
     # ------------------------------------------------------------------
-    # Derived paths
+    # Производные пути
     # ------------------------------------------------------------------
 
     @property
     def jsonl_path(self) -> Path:
-        """Path to the JSONL log file for the current run."""
+        """Путь к JSONL-файлу логов текущего запуска."""
         return self.output_dir / "steps.jsonl"
 
     @property
     def screenshots_dir(self) -> Path:
-        """Directory where step screenshots are stored."""
+        """Директория, в которой хранятся скриншоты шагов."""
         return self.output_dir / "screenshots"
 
     # ------------------------------------------------------------------
-    # Primary API — StepResult
+    # Основной API — StepResult
     # ------------------------------------------------------------------
 
     def log_result(
@@ -134,17 +134,17 @@ class StepLogger:
         screenshot_before: Image.Image | None = None,
         screenshot_after: Image.Image | None = None,
     ) -> None:
-        """Write a JSONL entry and optionally save before/after screenshots.
+        """Записать JSONL-запись и опционально сохранить скриншоты до/после.
 
         Args:
-            result: Rich step record to persist.
-            screenshot_before: Screenshot taken immediately before the action.
-            screenshot_after: Screenshot taken immediately after the action.
+            result: Расширенная запись шага для сохранения.
+            screenshot_before: Скриншот, снятый непосредственно перед действием.
+            screenshot_after: Скриншот, снятый непосредственно после действия.
         """
         self._step_index += 1
         idx = self._step_index
 
-        # -- Screenshots --------------------------------------------------
+        # -- Скриншоты --------------------------------------------------
         if screenshot_before is not None and self.save_screenshots:
             self._save_screenshot(screenshot_before, f"step_{idx:03d}_before.png")
 
@@ -185,7 +185,7 @@ class StepLogger:
         )
 
     # ------------------------------------------------------------------
-    # Backward-compatible API — StepRecord
+    # Обратно совместимый API — StepRecord
     # ------------------------------------------------------------------
 
     def log_step(
@@ -193,15 +193,15 @@ class StepLogger:
         record: StepRecord,
         screenshot: Image.Image | None = None,
     ) -> None:
-        """Log a step from a :class:`~screenwalker.core.context.StepRecord`.
+        """Записать шаг из :class:`~screenwalker.core.context.StepRecord`.
 
-        Extracts vision metadata (``find_target``, ``method_used``,
-        ``confidence``, ``bbox``, ``found_text``) from
-        ``record.metadata`` and delegates to :meth:`log_result`.
+        Извлекает метаданные vision (``find_target``, ``method_used``,
+        ``confidence``, ``bbox``, ``found_text``) из
+        ``record.metadata`` и делегирует вызов :meth:`log_result`.
 
         Args:
-            record: Engine-produced step execution record.
-            screenshot: Optional screenshot captured after the step.
+            record: Запись выполнения шага, созданная движком.
+            screenshot: Опциональный скриншот, снятый после шага.
         """
         meta: dict[str, Any] = record.metadata or {}
 
@@ -232,15 +232,15 @@ class StepLogger:
         self.log_result(result, screenshot_after=screenshot)
 
     # ------------------------------------------------------------------
-    # Scenario-level events
+    # События уровня сценария
     # ------------------------------------------------------------------
 
     def log_scenario_start(self, scenario_name: str, variable_count: int) -> None:
-        """Record the beginning of a scenario run.
+        """Записать начало выполнения сценария.
 
         Args:
-            scenario_name: Display name of the scenario.
-            variable_count: Number of runtime variables loaded.
+            scenario_name: Отображаемое имя сценария.
+            variable_count: Количество загруженных переменных времени выполнения.
         """
         self._scenario_name = scenario_name
         self._append_jsonl(
@@ -260,13 +260,13 @@ class StepLogger:
         failed_steps: int,
         elapsed: float,
     ) -> None:
-        """Record the completion of a scenario run.
+        """Записать завершение выполнения сценария.
 
         Args:
-            scenario_name: Display name of the scenario.
-            total_steps: Total steps attempted.
-            failed_steps: Steps that raised an error.
-            elapsed: Total wall-clock time in seconds.
+            scenario_name: Отображаемое имя сценария.
+            total_steps: Общее количество выполненных шагов.
+            failed_steps: Шаги, завершившиеся с ошибкой.
+            elapsed: Общее фактическое время выполнения в секундах.
         """
         success = failed_steps == 0
         self._append_jsonl(
@@ -291,18 +291,18 @@ class StepLogger:
         )
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Внутренние вспомогательные методы
     # ------------------------------------------------------------------
 
     def _save_screenshot(self, image: Image.Image, filename: str) -> Path:
-        """Save *image* to the screenshots sub-directory.
+        """Сохранить *image* в поддиректорию скриншотов.
 
         Args:
-            image: PIL image to save.
-            filename: Destination filename (no path component).
+            image: PIL-изображение для сохранения.
+            filename: Имя файла назначения (без компонента пути).
 
         Returns:
-            Absolute path of the saved file.
+            Абсолютный путь к сохранённому файлу.
         """
         dest = self.screenshots_dir / filename
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -310,10 +310,10 @@ class StepLogger:
         return dest.resolve()
 
     def _append_jsonl(self, entry: dict[str, Any]) -> None:
-        """Append *entry* as a single JSON line to the run's JSONL file.
+        """Добавить *entry* как одну JSON-строку в JSONL-файл запуска.
 
         Args:
-            entry: Dict to serialise.
+            entry: Словарь для сериализации.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         with self.jsonl_path.open("a", encoding="utf-8") as fh:
@@ -322,15 +322,15 @@ class StepLogger:
     def _save_step_screenshot(
         self, image: Image.Image, step_id: str, success: bool
     ) -> Path:
-        """Legacy helper for callers that pass step_id + success separately.
+        """Устаревший вспомогательный метод для вызовов, передающих step_id + success отдельно.
 
         Args:
-            image: PIL screenshot.
-            step_id: Step identifier used in the filename.
-            success: Whether the step succeeded (affects filename prefix).
+            image: PIL-скриншот.
+            step_id: Идентификатор шага, используемый в имени файла.
+            success: Успешно ли выполнился шаг (влияет на префикс имени файла).
 
         Returns:
-            Path of the saved file.
+            Путь к сохранённому файлу.
         """
         prefix = "ok" if success else "fail"
         slug = step_id.replace(" ", "_").replace("/", "-")

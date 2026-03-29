@@ -1,8 +1,8 @@
-"""ScenarioEngine — main orchestrator implementing a step-execution state machine.
+"""ScenarioEngine — главный оркестратор, реализующий конечный автомат выполнения шагов.
 
-The engine loads a scenario from YAML, validates it, and drives each step
-through the vision → action → assert pipeline while managing retries,
-fallbacks, and the :class:`~screenwalker.core.context.RunContext`.
+Движок загружает сценарий из YAML, валидирует его и прогоняет каждый шаг
+через конвейер vision → action → assert, управляя повторами,
+фолбэками и :class:`~screenwalker.core.context.RunContext`.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ logger = structlog.get_logger(__name__)
 
 
 class _RecoveryGoto(Exception):
-    """Internal signal: jump execution to a named step after a recovery action."""
+    """Внутренний сигнал: перейти к именованному шагу после recovery-действия."""
 
     def __init__(self, step_id: str) -> None:
         self.step_id = step_id
@@ -47,14 +47,14 @@ class _RecoveryGoto(Exception):
 
 
 def _build_region(raw: str | list[int] | None) -> BBox | None:
-    """Convert a raw region spec to a BBox.
+    """Преобразует «сырую» спецификацию региона в BBox.
 
     Args:
-        raw: Either ``None``, a named region string (ignored — returns None),
-            or a ``[x, y, w, h]`` list.
+        raw: Либо ``None``, либо строка с именем региона (игнорируется — возвращает None),
+            либо список ``[x, y, w, h]``.
 
     Returns:
-        BBox if *raw* is a list, else None.
+        BBox, если *raw* — список; иначе None.
     """
     if raw is None or isinstance(raw, str):
         return None
@@ -64,26 +64,26 @@ def _build_region(raw: str | list[int] | None) -> BBox | None:
 
 
 class ScenarioEngine:
-    """Executes a scenario YAML as an ordered state machine.
+    """Выполняет сценарий YAML как упорядоченный конечный автомат.
 
-    Each step is processed in sequence:
+    Каждый шаг обрабатывается последовательно:
 
-    1. **Interpolate** — substitute ``{{ variables }}`` in queries and text.
-    2. **Capture** — take a fresh screenshot.
-    3. **Verify screen** — check :attr:`~screenwalker.core.step.Step.expect_screen`
-       against the current UI state (if a screen analyzer is configured).
-    4. **Locate** — run the configured vision finder (cache → OCR / template / YOLO).
-    5. **Act** — delegate to the appropriate action handler.
-    6. **Record** — write a :class:`~screenwalker.core.context.StepRecord`.
-    7. **Retry** — on failure, retry up to ``step.retries`` times with
-       exponential back-off.
+    1. **Interpolate** — подставляет ``{{ переменные }}`` в запросы и тексты.
+    2. **Capture** — делает свежий скриншот.
+    3. **Verify screen** — проверяет :attr:`~screenwalker.core.step.Step.expect_screen`
+       относительно текущего состояния UI (если настроен анализатор экрана).
+    4. **Locate** — запускает выбранный vision-finder (кэш → OCR / template / YOLO).
+    5. **Act** — делегирует вызов соответствующему обработчику действия.
+    6. **Record** — записывает :class:`~screenwalker.core.context.StepRecord`.
+    7. **Retry** — при ошибке повторяет попытку до ``step.retries`` раз с
+       экспоненциальной задержкой.
 
     Attributes:
-        scenario_name: Human-readable name from YAML.
-        steps: Ordered list of :class:`~screenwalker.core.step.Step` objects.
-        teardown_steps: Steps executed after main steps (even on failure).
-        context: Mutable :class:`~screenwalker.core.context.RunContext`.
-        config: Validated :class:`~screenwalker.utils.config.AppConfig`.
+        scenario_name: Человекочитаемое имя из YAML.
+        steps: Упорядоченный список объектов :class:`~screenwalker.core.step.Step`.
+        teardown_steps: Шаги, выполняемые после основных шагов (в том числе при ошибке).
+        context: Изменяемый :class:`~screenwalker.core.context.RunContext`.
+        config: Валидированный :class:`~screenwalker.utils.config.AppConfig`.
     """
 
     def __init__(
@@ -106,24 +106,24 @@ class ScenarioEngine:
         detector: Any = None,
         popup_handler: Any = None,
     ) -> None:
-        """Initialize ScenarioEngine with all subsystems.
+        """Инициализирует ScenarioEngine со всеми подсистемами.
 
         Args:
-            scenario_name: Scenario display name.
-            steps: Main execution steps.
-            teardown_steps: Steps run after main steps regardless of outcome.
-            context: Run context shared across all steps.
-            config: Validated application configuration.
-            capture: Override :class:`~screenwalker.vision.capture.ScreenCapture`.
-            ocr_engine: Override OCR engine (TesseractEngine or compatible).
-            template_matcher: Override :class:`~screenwalker.vision.template_match.TemplateMatcher`.
-            screen_analyzer: Override :class:`~screenwalker.vision.screen_state.ScreenStateAnalyzer`.
-            mouse: Override :class:`~screenwalker.actions.mouse.MouseController`.
-            keyboard: Override :class:`~screenwalker.actions.keyboard.KeyboardController`.
-            clipboard: Override :class:`~screenwalker.actions.clipboard.ClipboardManager`.
-            cache: Override :class:`~screenwalker.learning.cache.ActionCache`.
-            step_logger: Override :class:`~screenwalker.learning.logger.StepLogger`.
-            detector: Override YOLO detector (UIElementDetector or compatible).
+            scenario_name: Отображаемое имя сценария.
+            steps: Основные шаги выполнения.
+            teardown_steps: Шаги, запускаемые после основных вне зависимости от результата.
+            context: Контекст запуска, общий для всех шагов.
+            config: Валидированная конфигурация приложения.
+            capture: Переопределяет :class:`~screenwalker.vision.capture.ScreenCapture`.
+            ocr_engine: Переопределяет OCR-движок (TesseractEngine или совместимый).
+            template_matcher: Переопределяет :class:`~screenwalker.vision.template_match.TemplateMatcher`.
+            screen_analyzer: Переопределяет :class:`~screenwalker.vision.screen_state.ScreenStateAnalyzer`.
+            mouse: Переопределяет :class:`~screenwalker.actions.mouse.MouseController`.
+            keyboard: Переопределяет :class:`~screenwalker.actions.keyboard.KeyboardController`.
+            clipboard: Переопределяет :class:`~screenwalker.actions.clipboard.ClipboardManager`.
+            cache: Переопределяет :class:`~screenwalker.learning.cache.ActionCache`.
+            step_logger: Переопределяет :class:`~screenwalker.learning.logger.StepLogger`.
+            detector: Переопределяет YOLO-детектор (UIElementDetector или совместимый).
         """
         self.scenario_name = scenario_name
         self.steps = steps
@@ -132,20 +132,20 @@ class ScenarioEngine:
         self.config = config
         self._log = structlog.get_logger(__name__).bind(scenario=scenario_name)
 
-        # ── Vision subsystems ────────────────────────────────────────────────
+        # ── Vision-подсистемы ────────────────────────────────────────────────
         self._capture = capture or self._build_capture(config)
-        self._ocr = ocr_engine  # lazily set to None; callers inject for non-dry runs
+        self._ocr = ocr_engine  # ленивая инициализация: None; вызывающий код подставляет для реальных запусков
         self._matcher = template_matcher
         self._screen_analyzer = screen_analyzer
-        self._detector = detector  # YOLO detector; None → no YOLO fallback
+        self._detector = detector  # YOLO-детектор; None → YOLO-фолбэк отключён
         self._popup_handler = popup_handler
 
-        # ── Action subsystems ────────────────────────────────────────────────
+        # ── Action-подсистемы ────────────────────────────────────────────────
         self._mouse = mouse or self._build_mouse(config)
         self._keyboard = keyboard or self._build_keyboard(config)
         self._clipboard = clipboard or self._build_clipboard(config)
 
-        # ── Learning subsystems ──────────────────────────────────────────────
+        # ── Learning-подсистемы ──────────────────────────────────────────────
         self._cache = cache or ActionCache(
             path=Path(config.learning.cache_path),
             ttl=config.learning.cache_ttl_seconds,
@@ -158,7 +158,7 @@ class ScenarioEngine:
         )
 
     # ------------------------------------------------------------------
-    # Subsystem builders
+    # Построители подсистем
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -188,7 +188,7 @@ class ScenarioEngine:
         return ClipboardManager(settle_delay=config.actions.clipboard_settle_delay)
 
     # ------------------------------------------------------------------
-    # Factory
+    # Фабрика
     # ------------------------------------------------------------------
 
     @classmethod
@@ -198,20 +198,20 @@ class ScenarioEngine:
         config: AppConfig | None = None,
         variable_overrides: dict[str, str] | None = None,
     ) -> "ScenarioEngine":
-        """Load and validate a scenario YAML file, returning a ready engine.
+        """Загружает и валидирует YAML-файл сценария, возвращая готовый движок.
 
         Args:
-            path: Path to the scenario YAML file.
-            config: Pre-loaded application config; loads defaults if None.
-            variable_overrides: CLI ``--var`` overrides merged on top of
-                scenario ``variables`` section.
+            path: Путь к YAML-файлу сценария.
+            config: Предзагруженная конфигурация приложения; если None — загружаются значения по умолчанию.
+            variable_overrides: Переопределения из CLI-опции ``--var``, накладываемые поверх
+                секции ``variables`` сценария.
 
         Returns:
-            A fully initialised :class:`ScenarioEngine`.
+            Полностью инициализированный :class:`ScenarioEngine`.
 
         Raises:
-            ScenarioValidationError: If the YAML is invalid or missing required fields.
-            FileNotFoundError: If *path* does not exist.
+            ScenarioValidationError: Если YAML невалиден или отсутствуют обязательные поля.
+            FileNotFoundError: Если *path* не существует.
         """
         path = Path(path)
         if not path.exists():
@@ -231,7 +231,7 @@ class ScenarioEngine:
 
         base_config = config or load_config(None)
 
-        # Apply per-scenario config overrides
+        # Применяем переопределения конфига из секции сценария
         scenario_config_raw = raw.get("config", {})
         resolved_config = (
             merge_scenario_config(base_config, scenario_config_raw)
@@ -256,7 +256,7 @@ class ScenarioEngine:
             config=resolved_config,
         )
 
-        # Load OCR engine if configured
+        # Загружаем OCR-движок, если настроен
         if resolved_config.vision.ocr_engine == "tesseract":
             try:
                 from screenwalker.vision.ocr import TesseractEngine
@@ -268,7 +268,7 @@ class ScenarioEngine:
             except ImportError:
                 logger.warning("Tesseract not available — OCR steps will fail")
 
-        # Load YOLO detector if enabled
+        # Загружаем YOLO-детектор, если включён
         if getattr(resolved_config.vision, "yolo_enabled", False):
             try:
                 from screenwalker.vision.detector import create_detector
@@ -276,7 +276,7 @@ class ScenarioEngine:
             except Exception as exc:
                 logger.warning("YOLO detector init failed", error=str(exc))
 
-        # Load template matcher if templates directory exists
+        # Загружаем template matcher, если существует директория с шаблонами
         templates_dir = path.parent / "templates"
         if templates_dir.exists():
             try:
@@ -285,7 +285,7 @@ class ScenarioEngine:
             except ImportError:
                 logger.warning("OpenCV not available — template steps will fail")
 
-        # Load popup handler if popups config or popups.yaml exists
+        # Загружаем popup handler, если существует popups.yaml или конфиг попапов
         popups_config_path = path.parent / "popups.yaml"
         if popups_config_path.exists() and engine._ocr is not None:
             try:
@@ -299,7 +299,7 @@ class ScenarioEngine:
             except Exception as exc:
                 logger.warning("Failed to init popup handler", error=str(exc))
 
-        # Load screen fingerprints from scenario YAML
+        # Загружаем fingerprints экранов из YAML сценария
         screens_config = raw.get("screens", {})
         if screens_config and engine._ocr is not None:
             try:
@@ -326,17 +326,17 @@ class ScenarioEngine:
         return engine
 
     # ------------------------------------------------------------------
-    # Execution
+    # Выполнение
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Execute all scenario steps, then run teardown steps.
+        """Выполняет все шаги сценария, затем запускает teardown-шаги.
 
-        Supports ``goto`` recovery actions that jump execution to a named step.
+        Поддерживает recovery-действие ``goto``, переводящее выполнение к именованному шагу.
 
         Raises:
-            ScenarioError: Re-raised after teardown if any step with
-                ``on_failure=abort`` fails.
+            ScenarioError: Перебрасывается после teardown, если любой шаг с
+                ``on_failure=abort`` завершился ошибкой.
         """
         run_start = time.monotonic()
         started_at = datetime.now(timezone.utc)
@@ -399,7 +399,7 @@ class ScenarioEngine:
         )
 
     def dry_run(self) -> None:
-        """Print planned steps without executing any actions."""
+        """Выводит запланированные шаги без выполнения каких-либо действий."""
         self._log.info("DRY RUN — no actions will be executed")
         for i, step in enumerate(self.steps, start=1):
             action_repr = f"[{step.action.value}]"
@@ -411,21 +411,21 @@ class ScenarioEngine:
             print(f"  {i:>3}. {step.id:<30} {action_repr:<20} {find_repr}")
 
     # ------------------------------------------------------------------
-    # Step execution (with retry)
+    # Выполнение шага (с повторами)
     # ------------------------------------------------------------------
 
     def _execute_step(self, step: Step) -> None:
-        """Execute a single step, retrying up to ``step.retries`` times.
+        """Выполняет один шаг с повторами до ``step.retries`` раз.
 
-        Recovery actions are applied between attempts when the failure trigger
-        matches an entry in ``step.recovery``.
+        Recovery-действия применяются между попытками, если триггер ошибки
+        соответствует записи в ``step.recovery``.
 
         Args:
-            step: The step to execute.
+            step: Шаг для выполнения.
 
         Raises:
-            ScenarioError: After all retry attempts are exhausted.
-            _RecoveryGoto: If a recovery action specifies ``then: goto:<id>``.
+            ScenarioError: После исчерпания всех попыток.
+            _RecoveryGoto: Если recovery-действие указывает ``then: goto:<id>``.
         """
         log = self._log.bind(step_id=step.id, action=step.action.value)
         max_attempts = max(1, step.retries)
@@ -473,16 +473,16 @@ class ScenarioEngine:
         raise last_exc
 
     def _execute_step_once(self, step: Step) -> None:
-        """Execute a single step attempt through the full pipeline.
+        """Выполняет одну попытку шага через полный конвейер.
 
         Args:
-            step: The step to execute.
+            step: Шаг для выполнения.
 
         Raises:
-            StepTimeout: If the element is not found within the timeout.
-            ElementNotFound: If all finders are exhausted.
-            ScreenMismatch: If expect_screen does not match the current screen.
-            ActionError: If the action itself raises.
+            StepTimeout: Если элемент не найден в течение таймаута.
+            ElementNotFound: Если все поисковые методы исчерпаны.
+            ScreenMismatch: Если expect_screen не совпадает с текущим экраном.
+            ActionError: Если само действие выбросило исключение.
         """
         log = self._log.bind(step_id=step.id, action=step.action.value)
         log.info("Executing step", description=step.description)
@@ -493,15 +493,15 @@ class ScenarioEngine:
         screenshot: Image.Image | None = None
 
         try:
-            # 1. Interpolate variables
+            # 1. Интерполяция переменных
             interpolated = self._interpolate_step(step)
 
-            # 2. Capture screen
+            # 2. Снимок экрана
             if not self.context.dry_run:
                 screenshot = self._capture.capture_full()
                 self.context.update_screenshot(screenshot)
 
-            # 2b. Detect and dismiss any popup before proceeding
+            # 2b. Обнаруживаем и закрываем попап перед выполнением шага
             if not self.context.dry_run and self._popup_handler is not None and screenshot is not None:
                 if self._popup_handler.detect_and_handle(
                     screenshot,
@@ -511,19 +511,19 @@ class ScenarioEngine:
                     screenshot = self._capture.capture_full()
                     self.context.update_screenshot(screenshot)
 
-            # 3. Verify screen state
+            # 3. Проверяем состояние экрана
             if interpolated.expect_screen and not self.context.dry_run:
                 self._verify_screen_state(interpolated, screenshot)
 
-            # 4. Locate element
+            # 4. Поиск элемента
             find_result: FindResult | None = None
             if interpolated.find is not None and not self.context.dry_run:
                 find_result = self._locate_with_retry(interpolated)
 
-            # 5. Execute action
+            # 5. Выполняем действие
             self._dispatch_action(interpolated, find_result)
 
-            # 6. Post-action pause
+            # 6. Пауза после действия
             if interpolated.wait_after > 0:
                 time.sleep(interpolated.wait_after)
 
@@ -551,18 +551,18 @@ class ScenarioEngine:
                 log.debug("Step logger error (non-fatal)", error=str(exc))
 
     # ------------------------------------------------------------------
-    # Screen state verification
+    # Проверка состояния экрана
     # ------------------------------------------------------------------
 
     def _verify_screen_state(self, step: Step, screenshot: Image.Image | None) -> None:
-        """Check the current screen matches step.expect_screen.
+        """Проверяет, что текущий экран соответствует step.expect_screen.
 
         Args:
-            step: Step with a populated expect_screen field.
-            screenshot: Current screen image.
+            step: Шаг с заполненным полем expect_screen.
+            screenshot: Изображение текущего экрана.
 
         Raises:
-            ScreenMismatch: If the detected screen does not match the expected one.
+            ScreenMismatch: Если обнаруженный экран не совпадает с ожидаемым.
         """
         if self._screen_analyzer is None or screenshot is None:
             return
@@ -576,25 +576,25 @@ class ScenarioEngine:
             )
 
     # ------------------------------------------------------------------
-    # Vision pipeline — locate element
+    # Vision-конвейер — поиск элемента
     # ------------------------------------------------------------------
 
     def _locate_with_retry(self, step: Step) -> FindResult:
-        """Poll the screen until the target element is found or timeout expires.
+        """Опрашивает экран, пока целевой элемент не найден или не истёк таймаут.
 
-        Priority order on each poll:
-          1. Cache lookup (fast path)
-          2. Primary finder (``step.find``)
-          3. Fallback finder (``step.fallback``)
+        Приоритет на каждом опросе:
+          1. Поиск в кэше (быстрый путь)
+          2. Основной finder (``step.find``)
+          3. Фолбэк finder (``step.fallback``)
 
         Args:
-            step: The (interpolated) step whose ``find`` spec describes the target.
+            step: Интерполированный шаг, чья спецификация ``find`` описывает цель.
 
         Returns:
-            A :class:`~screenwalker.vision.screen_state.FindResult`.
+            Объект :class:`~screenwalker.vision.screen_state.FindResult`.
 
         Raises:
-            StepTimeout: If the element is not found within the timeout.
+            StepTimeout: Если элемент не найден в течение таймаута.
         """
         assert step.find is not None
         timeout = step.timeout or self.config.timeouts.step_default
@@ -611,7 +611,7 @@ class ScenarioEngine:
                 time.sleep(min(poll_interval, remaining))
             first_poll = False
 
-            # Capture fresh screenshot for each poll
+            # Делаем свежий снимок экрана на каждом опросе
             try:
                 image = self._capture.capture_full()
                 self.context.update_screenshot(image)
@@ -619,21 +619,21 @@ class ScenarioEngine:
                 log.warning("Screen capture failed during locate", error=str(exc))
                 continue
 
-            # 1. Check cache
+            # 1. Поиск в кэше
             screen_id = self.context.current_screen or ""
             cached = self._cache.lookup(screen_id, step.find.query)
             if cached is not None:
                 log.debug("Element found in cache")
                 return cached
 
-            # 2. Primary finder
+            # 2. Основной finder
             result = self._find_by_spec(image, step.find, step.id)
 
-            # 3. Fallback finder
+            # 3. Фолбэк finder
             if result is None and step.fallback is not None:
                 result = self._find_by_spec(image, step.fallback, step.id)
 
-            # 4. YOLO fallback — try detector if OCR and template both failed
+            # 4. YOLO-фолбэк — пробуем детектор, если OCR и template не нашли элемент
             if result is None and self._detector is not None and getattr(self._detector, "available", False):
                 if step.find.method != FindMethod.YOLO:
                     yolo_region = _build_region(step.find.region)
@@ -642,7 +642,7 @@ class ScenarioEngine:
                         log.debug("Element found via YOLO fallback")
 
             if result is not None:
-                # Store in cache for future steps
+                # Сохраняем в кэш для последующих шагов
                 if screen_id:
                     try:
                         self._cache.store(screen_id, result)
@@ -660,15 +660,15 @@ class ScenarioEngine:
     def _find_by_spec(
         self, image: Image.Image, spec: FindSpec, step_id: str
     ) -> FindResult | None:
-        """Run a single vision finder pass.
+        """Выполняет один проход vision-поиска.
 
         Args:
-            image: Current screenshot.
-            spec: FindSpec describing method, query, region, and thresholds.
-            step_id: Used in warning logs.
+            image: Текущий скриншот.
+            spec: FindSpec, описывающий метод, запрос, регион и пороги.
+            step_id: Используется в warning-логах.
 
         Returns:
-            FindResult if found, else None.
+            FindResult, если элемент найден; иначе None.
         """
         region = _build_region(spec.region)
 
@@ -727,17 +727,17 @@ class ScenarioEngine:
         return None
 
     # ------------------------------------------------------------------
-    # Variable interpolation
+    # Интерполяция переменных
     # ------------------------------------------------------------------
 
     def _interpolate_step(self, step: Step) -> Step:
-        """Return a copy of *step* with all ``{{ var }}`` tokens resolved.
+        """Возвращает копию *step* с заменёнными токенами ``{{ var }}``.
 
         Args:
-            step: Original step (not mutated).
+            step: Исходный шаг (не мутируется).
 
         Returns:
-            New step with string fields variable-substituted.
+            Новый шаг со строковыми полями после подстановки переменных.
         """
         ctx = self.context
         updates: dict[str, Any] = {}
@@ -749,7 +749,7 @@ class ScenarioEngine:
         if step.label is not None:
             updates["label"] = ctx.interpolate(step.label)
 
-        # Interpolate the find query
+        # Интерполируем запрос поиска
         if step.find is not None and step.find.query:
             new_query = ctx.interpolate(step.find.query)
             if new_query != step.find.query:
@@ -760,15 +760,15 @@ class ScenarioEngine:
         return step.model_copy(update=updates)
 
     # ------------------------------------------------------------------
-    # Action dispatch
+    # Диспетчеризация действий
     # ------------------------------------------------------------------
 
     def _dispatch_action(self, step: Step, find_result: FindResult | None) -> None:
-        """Route a step to the appropriate action handler.
+        """Направляет шаг к соответствующему обработчику действия.
 
         Args:
-            step: The (interpolated) step to execute.
-            find_result: Located element, or None for actions that don't need one.
+            step: Интерполированный шаг для выполнения.
+            find_result: Найденный элемент, или None для действий, которым он не нужен.
         """
         if self.context.dry_run:
             logger.debug("DRY RUN — action skipped", action=step.action.value, step_id=step.id)
@@ -797,25 +797,25 @@ class ScenarioEngine:
         handler(step, find_result)
 
     # ------------------------------------------------------------------
-    # Action handlers
+    # Обработчики действий
     # ------------------------------------------------------------------
 
     def _resolve_center(
         self, step: Step, find_result: FindResult | None
     ) -> tuple[int, int]:
-        """Return the (x, y) screen coordinate to act on.
+        """Возвращает экранные координаты (x, y) для выполнения действия.
 
-        Applies find spec offset if provided.
+        Применяет смещение из find spec, если оно задано.
 
         Args:
-            step: Current step (for offset).
-            find_result: Located element.
+            step: Текущий шаг (источник смещения).
+            find_result: Найденный элемент.
 
         Returns:
-            (cx, cy) in screen pixels.
+            (cx, cy) в пикселях экрана.
 
         Raises:
-            ElementNotFound: If find_result is None.
+            ElementNotFound: Если find_result равен None.
         """
         if find_result is None:
             query = step.find.query if step.find else "<no find spec>"
@@ -827,22 +827,22 @@ class ScenarioEngine:
         return cx, cy
 
     def _action_click(self, step: Step, find_result: FindResult | None) -> None:
-        """Left-click the located element."""
+        """Левый клик по найденному элементу."""
         cx, cy = self._resolve_center(step, find_result)
         self._mouse.click(cx, cy, button="left")
 
     def _action_double_click(self, step: Step, find_result: FindResult | None) -> None:
-        """Double-click the located element."""
+        """Двойной клик по найденному элементу."""
         cx, cy = self._resolve_center(step, find_result)
         self._mouse.double_click(cx, cy)
 
     def _action_right_click(self, step: Step, find_result: FindResult | None) -> None:
-        """Right-click the located element."""
+        """Правый клик по найденному элементу."""
         cx, cy = self._resolve_center(step, find_result)
         self._mouse.right_click(cx, cy)
 
     def _action_type(self, step: Step, find_result: FindResult | None) -> None:
-        """Click the element (if found), optionally clear it, then type text."""
+        """Кликает по элементу (если найден), при необходимости очищает его, затем вводит текст."""
         if find_result is not None:
             cx, cy = self._resolve_center(step, find_result)
             self._mouse.click(cx, cy)
@@ -856,13 +856,13 @@ class ScenarioEngine:
         self._keyboard.type_text(text)
 
     def _action_hotkey(self, step: Step, find_result: FindResult | None) -> None:
-        """Send a key combination."""
+        """Отправляет комбинацию клавиш."""
         if not step.keys:
             raise ActionError("hotkey action requires 'keys'", step_id=step.id)
         self._keyboard.hotkey(*step.keys)
 
     def _action_scroll(self, step: Step, find_result: FindResult | None) -> None:
-        """Scroll at the element position or current cursor position."""
+        """Прокручивает в позиции элемента или в текущей позиции курсора."""
         direction = str(step.extra.get("direction", "down"))
         clicks = int(step.extra.get("clicks", 3))
         if find_result is not None:
@@ -874,9 +874,9 @@ class ScenarioEngine:
         self._mouse.scroll(cx, cy, clicks=clicks, direction=direction)
 
     def _action_drag(self, step: Step, find_result: FindResult | None) -> None:
-        """Drag from the element to a target position.
+        """Перетаскивает элемент к целевой позиции.
 
-        The target position is read from ``step.extra["to"]`` as [x, y].
+        Целевая позиция считывается из ``step.extra["to"]`` в формате [x, y].
         """
         if find_result is None:
             query = step.find.query if step.find else "<no find spec>"
@@ -890,7 +890,7 @@ class ScenarioEngine:
         self._mouse.drag(sx, sy, int(to[0]), int(to[1]))
 
     def _action_copy(self, step: Step, find_result: FindResult | None) -> None:
-        """Copy the selection at the located element into a context variable."""
+        """Копирует выделенный текст в найденном элементе в переменную контекста."""
         if find_result is not None:
             cx, cy = self._resolve_center(step, find_result)
             self._mouse.click(cx, cy)
@@ -899,14 +899,14 @@ class ScenarioEngine:
         self.context.set_variable(var_name, text)
 
     def _action_paste(self, step: Step, find_result: FindResult | None) -> None:
-        """Paste clipboard contents at the current position."""
+        """Вставляет содержимое буфера обмена в текущую позицию."""
         if find_result is not None:
             cx, cy = self._resolve_center(step, find_result)
             self._mouse.click(cx, cy)
         self._clipboard.paste()
 
     def _action_assert_visible(self, step: Step, find_result: FindResult | None) -> None:
-        """Assert that the target element is visible on screen."""
+        """Проверяет, что целевой элемент виден на экране."""
         if find_result is None:
             query = step.find.query if step.find else "<no find spec>"
             raise ElementNotFound(step.id, query, ["any"])
@@ -918,7 +918,7 @@ class ScenarioEngine:
         )
 
     def _action_assert_text(self, step: Step, find_result: FindResult | None) -> None:
-        """Assert that the OCR-found element text matches the expected value."""
+        """Проверяет, что текст найденного OCR-элемента совпадает с ожидаемым значением."""
         if find_result is None:
             query = step.find.query if step.find else "<no find spec>"
             raise ElementNotFound(step.id, query, ["ocr"])
@@ -930,7 +930,7 @@ class ScenarioEngine:
             from rapidfuzz import fuzz
             score = fuzz.partial_ratio(expected.lower(), find_result.element.lower())
         except ImportError:
-            # Exact match fallback
+            # Фолбэк на точное совпадение
             score = 100 if expected.lower() in find_result.element.lower() else 0
 
         if score < fuzzy_threshold:
@@ -948,13 +948,13 @@ class ScenarioEngine:
         )
 
     def _action_wait(self, step: Step, find_result: FindResult | None) -> None:
-        """Sleep for a fixed duration."""
+        """Ожидает фиксированное время."""
         duration = step.wait or 0.0
         logger.debug("Waiting", seconds=duration, step_id=step.id)
         time.sleep(duration)
 
     def _action_launch(self, step: Step, find_result: FindResult | None) -> None:
-        """Launch an application by path, URL, or command."""
+        """Запускает приложение по пути, URL или команде."""
         if not step.target:
             raise ActionError("launch action requires 'target'", step_id=step.id)
 
@@ -975,7 +975,7 @@ class ScenarioEngine:
             ) from exc
 
     def _action_screenshot(self, step: Step, find_result: FindResult | None) -> None:
-        """Capture and save a screenshot, updating the run context."""
+        """Делает скриншот, сохраняет его и обновляет контекст запуска."""
         image = self._capture.capture_full()
         self.context.update_screenshot(image)
         label = step.label or step.id
@@ -986,7 +986,7 @@ class ScenarioEngine:
             self._log.warning("Screenshot save failed", step_id=step.id, error=str(exc))
 
     # ------------------------------------------------------------------
-    # Wait strategies
+    # Стратегии ожидания
     # ------------------------------------------------------------------
 
     def wait_for_screen_change(
@@ -995,19 +995,19 @@ class ScenarioEngine:
         poll_interval: float = 0.5,
         mse_threshold: float | None = None,
     ) -> bool:
-        """Wait until the screen changes significantly (MSE metric).
+        """Ожидает значимого изменения экрана (метрика MSE).
 
-        Captures an initial screenshot and polls until the mean-squared error
-        between that baseline and the current screen exceeds *mse_threshold*.
+        Делает начальный снимок и опрашивает экран, пока среднеквадратичная ошибка
+        между базовым снимком и текущим экраном не превысит *mse_threshold*.
 
         Args:
-            timeout: Maximum wait time in seconds.
-            poll_interval: Seconds between screenshots.
-            mse_threshold: Minimum MSE to consider the screen changed.
-                Defaults to ``config.vision.screen_change_mse_threshold``.
+            timeout: Максимальное время ожидания в секундах.
+            poll_interval: Интервал между снимками в секундах.
+            mse_threshold: Минимальное значение MSE, при котором экран считается изменённым.
+                По умолчанию: ``config.vision.screen_change_mse_threshold``.
 
         Returns:
-            True if the screen changed within *timeout*, False otherwise.
+            True, если экран изменился в течение *timeout*; иначе False.
         """
         threshold = (
             mse_threshold
@@ -1045,16 +1045,16 @@ class ScenarioEngine:
         timeout: float,
         poll_interval: float = 0.5,
     ) -> "FindResult | None":
-        """Poll until the target element appears on screen.
+        """Опрашивает экран, пока целевой элемент не появится.
 
         Args:
-            find_spec: Vision spec describing the element to locate.
-            timeout: Maximum wait time in seconds.
-            poll_interval: Seconds between polls.
+            find_spec: Vision spec, описывающий искомый элемент.
+            timeout: Максимальное время ожидания в секундах.
+            poll_interval: Интервал между опросами в секундах.
 
         Returns:
-            :class:`~screenwalker.vision.screen_state.FindResult` when found,
-            or ``None`` if timeout elapsed.
+            :class:`~screenwalker.vision.screen_state.FindResult` при обнаружении,
+            или ``None``, если истёк таймаут.
         """
         deadline = time.monotonic() + timeout
         first = True
@@ -1081,15 +1081,15 @@ class ScenarioEngine:
         timeout: float,
         poll_interval: float = 0.5,
     ) -> bool:
-        """Poll until the target element disappears from screen.
+        """Опрашивает экран, пока целевой элемент не исчезнет.
 
         Args:
-            find_spec: Vision spec describing the element to watch.
-            timeout: Maximum wait time in seconds.
-            poll_interval: Seconds between polls.
+            find_spec: Vision spec, описывающий отслеживаемый элемент.
+            timeout: Максимальное время ожидания в секундах.
+            poll_interval: Интервал между опросами в секундах.
 
         Returns:
-            True if the element disappeared within *timeout*, False otherwise.
+            True, если элемент исчез в течение *timeout*; иначе False.
         """
         deadline = time.monotonic() + timeout
         first = True
@@ -1112,21 +1112,21 @@ class ScenarioEngine:
         return False
 
     # ------------------------------------------------------------------
-    # Recovery
+    # Recovery (восстановление после ошибки)
     # ------------------------------------------------------------------
 
     def _apply_recovery(self, step: Step, trigger: RecoveryTrigger) -> bool:
-        """Execute the recovery action matching *trigger*.
+        """Выполняет recovery-действие, соответствующее *trigger*.
 
         Args:
-            step: The step that failed.
-            trigger: Which error condition fired.
+            step: Шаг, который завершился ошибкой.
+            trigger: Условие ошибки, которое сработало.
 
         Returns:
-            True to continue retrying, False to abort (caller should re-raise).
+            True — продолжать повторы; False — прервать (вызывающий код должен перебросить исключение).
 
         Raises:
-            _RecoveryGoto: When the recovery specifies ``then: goto:<step_id>``.
+            _RecoveryGoto: Если recovery указывает ``then: goto:<step_id>``.
         """
         matching = [r for r in step.recovery if r.trigger == trigger]
         if not matching:
@@ -1223,11 +1223,11 @@ class ScenarioEngine:
             self._log.warning("report.generation_failed", error=str(exc))
 
     # ------------------------------------------------------------------
-    # Teardown
+    # Teardown (завершающие шаги)
     # ------------------------------------------------------------------
 
     def _run_teardown(self) -> None:
-        """Execute teardown steps, swallowing errors to avoid masking main failure."""
+        """Выполняет teardown-шаги, поглощая ошибки, чтобы не скрыть основной сбой."""
         for step in self.teardown_steps:
             try:
                 self._execute_step(step)
@@ -1237,21 +1237,21 @@ class ScenarioEngine:
                 )
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Вспомогательные методы
     # ------------------------------------------------------------------
 
     @staticmethod
     def _parse_steps(raw_steps: list[dict[str, Any]]) -> list[Step]:
-        """Parse a list of raw dicts into typed Step objects.
+        """Разбирает список «сырых» словарей в типизированные объекты Step.
 
         Args:
-            raw_steps: List of step dicts from YAML.
+            raw_steps: Список словарей шагов из YAML.
 
         Returns:
-            List of validated :class:`~screenwalker.core.step.Step` instances.
+            Список валидированных экземпляров :class:`~screenwalker.core.step.Step`.
 
         Raises:
-            ScenarioValidationError: If any step fails Pydantic validation.
+            ScenarioValidationError: Если любой шаг не проходит валидацию Pydantic.
         """
         steps: list[Step] = []
         for i, raw in enumerate(raw_steps):

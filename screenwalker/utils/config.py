@@ -1,13 +1,13 @@
-"""Configuration loading and Pydantic validation.
+"""Загрузка конфигурации и валидация через Pydantic.
 
-The configuration is layered:
-1. Built-in defaults (hardcoded in Pydantic models).
-2. ``config/default.yaml`` merged on top.
-3. Project-level YAML passed via ``--config``.
-4. Per-scenario ``config:`` block in the scenario YAML.
+Конфигурация формируется послойно:
+1. Встроенные значения по умолчанию (заданы в Pydantic-моделях).
+2. ``config/default.yaml`` — накладывается поверх.
+3. YAML уровня проекта, переданный через ``--config``.
+4. Блок ``config:`` конкретного сценария в YAML-файле сценария.
 
-Later layers override earlier ones.  All keys are validated by Pydantic so
-typos in YAML surface at startup, not mid-run.
+Каждый следующий слой перекрывает предыдущие.  Все ключи валидируются
+Pydantic, поэтому опечатки в YAML обнаруживаются при старте, а не в процессе выполнения.
 """
 
 from __future__ import annotations
@@ -20,18 +20,18 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Pydantic config models
+# Pydantic-модели конфигурации
 # ---------------------------------------------------------------------------
 
 
 class TimeoutsConfig(BaseModel):
-    """Timing configuration.
+    """Настройки тайм-аутов.
 
     Attributes:
-        step_default: Default per-step timeout in seconds.
-        poll_interval: Interval between find-element retries.
-        screenshot_delay: Pause before capturing (UI settle time).
-        action_delay: Pause after each action.
+        step_default: Тайм-аут для каждого шага по умолчанию (секунды).
+        poll_interval: Интервал между повторными попытками поиска элемента.
+        screenshot_delay: Пауза перед захватом экрана (ожидание стабилизации UI).
+        action_delay: Пауза после каждого действия.
     """
 
     step_default: float = 15.0
@@ -41,23 +41,23 @@ class TimeoutsConfig(BaseModel):
 
 
 class VisionConfig(BaseModel):
-    """Vision pipeline configuration.
+    """Настройки визуального конвейера.
 
     Attributes:
-        template_threshold: Minimum template match confidence.
-        multi_scale: Enable multi-scale template search.
-        scale_min: Minimum scale factor for multi-scale search.
-        scale_max: Maximum scale factor for multi-scale search.
-        scale_steps: Number of scale levels.
-        ocr_engine: OCR backend — ``"tesseract"`` or ``"paddleocr"``.
-        ocr_lang: Tesseract language code(s).
-        ocr_config: Tesseract CLI flags.
-        ocr_preprocess: Pre-process images before OCR.
-        yolo_enabled: Enable YOLO detection.
-        yolo_model_path: Path to YOLO weights.
-        yolo_confidence: Minimum YOLO detection confidence.
-        screen_state_method: Screen-state identification strategy.
-        screen_state_threshold: Minimum confidence for state identification.
+        template_threshold: Минимальный порог уверенности при совпадении шаблона.
+        multi_scale: Включить многомасштабный поиск шаблона.
+        scale_min: Минимальный масштабный коэффициент при многомасштабном поиске.
+        scale_max: Максимальный масштабный коэффициент при многомасштабном поиске.
+        scale_steps: Количество уровней масштаба.
+        ocr_engine: OCR-движок — ``"tesseract"`` или ``"paddleocr"``.
+        ocr_lang: Языковой код(ы) для Tesseract.
+        ocr_config: Флаги командной строки Tesseract.
+        ocr_preprocess: Предварительная обработка изображений перед OCR.
+        yolo_enabled: Включить детекцию через YOLO.
+        yolo_model_path: Путь к весам модели YOLO.
+        yolo_confidence: Минимальный порог уверенности детекции YOLO.
+        screen_state_method: Стратегия определения состояния экрана.
+        screen_state_threshold: Минимальная уверенность для идентификации состояния.
     """
 
     template_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
@@ -78,12 +78,12 @@ class VisionConfig(BaseModel):
 
 
 class MatchingConfig(BaseModel):
-    """Text matching configuration.
+    """Настройки сопоставления текста.
 
     Attributes:
-        fuzzy_threshold: RapidFuzz score threshold (0–100).
-        normalize_whitespace: Collapse whitespace before matching.
-        case_insensitive: Case-insensitive matching.
+        fuzzy_threshold: Порог оценки RapidFuzz (0–100).
+        normalize_whitespace: Сжимать пробелы перед сопоставлением.
+        case_insensitive: Сопоставление без учёта регистра.
     """
 
     fuzzy_threshold: int = Field(default=80, ge=0, le=100)
@@ -92,17 +92,17 @@ class MatchingConfig(BaseModel):
 
 
 class ActionsConfig(BaseModel):
-    """Action timing configuration.
+    """Настройки тайм-аутов действий.
 
     Attributes:
-        mouse_move_duration: Smooth mouse movement duration in seconds.
-        typing_interval: Seconds between keystrokes.
-        double_click_interval: Seconds between double-click presses.
-        humanize: Add random jitter to coordinates and pre-action delays.
-        humanize_offset_px: Maximum random pixel offset (±) applied to coordinates.
-        humanize_delay_min_ms: Minimum random pre-action delay in milliseconds.
-        humanize_delay_max_ms: Maximum random pre-action delay in milliseconds.
-        clipboard_settle_delay: Seconds to wait after Ctrl+C before reading clipboard.
+        mouse_move_duration: Длительность плавного перемещения мыши (секунды).
+        typing_interval: Интервал между нажатиями клавиш (секунды).
+        double_click_interval: Интервал между нажатиями при двойном клике (секунды).
+        humanize: Добавлять случайный разброс координат и задержки перед действиями.
+        humanize_offset_px: Максимальное случайное смещение (±пиксели) для координат.
+        humanize_delay_min_ms: Минимальная случайная задержка перед действием (миллисекунды).
+        humanize_delay_max_ms: Максимальная случайная задержка перед действием (миллисекунды).
+        clipboard_settle_delay: Ожидание после Ctrl+C перед чтением буфера обмена (секунды).
     """
 
     mouse_move_duration: float = 0.2
@@ -116,14 +116,14 @@ class ActionsConfig(BaseModel):
 
 
 class LoggingConfig(BaseModel):
-    """Logging configuration.
+    """Настройки логирования.
 
     Attributes:
-        level: Log verbosity (debug/info/warning/error).
-        output_dir: Root directory for run artefacts.
-        save_screenshots: Persist screenshots per step.
-        save_on_failure: Always save screenshot on step failure.
-        structured: Use structlog JSON output.
+        level: Уровень детализации логов (debug/info/warning/error).
+        output_dir: Корневой каталог для артефактов запуска.
+        save_screenshots: Сохранять скриншоты для каждого шага.
+        save_on_failure: Всегда сохранять скриншот при ошибке шага.
+        structured: Использовать вывод structlog в формате JSON.
     """
 
     level: str = "info"
@@ -134,13 +134,13 @@ class LoggingConfig(BaseModel):
 
 
 class LearningConfig(BaseModel):
-    """Learning / caching configuration.
+    """Настройки обучения и кэширования.
 
     Attributes:
-        cache_enabled: Enable action result caching.
-        cache_path: Path to the JSON cache file.
-        cache_ttl_seconds: Maximum age of a cache entry.
-        pattern_learning: Enable synonym learning from observations.
+        cache_enabled: Включить кэширование результатов действий.
+        cache_path: Путь к JSON-файлу кэша.
+        cache_ttl_seconds: Максимальный возраст записи в кэше (секунды).
+        pattern_learning: Включить изучение синонимов на основе наблюдений.
     """
 
     cache_enabled: bool = True
@@ -150,12 +150,12 @@ class LearningConfig(BaseModel):
 
 
 class RetryConfig(BaseModel):
-    """Retry and backoff configuration.
+    """Настройки повторных попыток и экспоненциальной задержки.
 
     Attributes:
-        max_attempts: Maximum retry attempts per step.
-        backoff_base: Exponential backoff multiplier.
-        backoff_max: Maximum wait between retries in seconds.
+        max_attempts: Максимальное количество попыток для каждого шага.
+        backoff_base: Множитель экспоненциальной задержки.
+        backoff_max: Максимальное время ожидания между попытками (секунды).
     """
 
     max_attempts: int = 3
@@ -182,9 +182,10 @@ class ReportConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
-    """Root application configuration.
+    """Корневая конфигурация приложения.
 
-    All sub-sections have sensible defaults so an empty config file is valid.
+    Все подсекции имеют разумные значения по умолчанию, поэтому пустой
+    файл конфигурации является допустимым.
     """
 
     timeouts: TimeoutsConfig = Field(default_factory=TimeoutsConfig)
@@ -198,21 +199,21 @@ class AppConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Loading helpers
+# Вспомогательные функции загрузки
 # ---------------------------------------------------------------------------
 
 _DEFAULTS_PATH = Path(__file__).parents[2] / "config" / "default.yaml"
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge *override* into *base*, returning a new dict.
+    """Рекурсивно объединяет *override* с *base*, возвращая новый словарь.
 
     Args:
-        base: Base dictionary.
-        override: Values to overlay on *base*.
+        base: Базовый словарь.
+        override: Значения, накладываемые поверх *base*.
 
     Returns:
-        New merged dictionary (neither input is mutated).
+        Новый объединённый словарь (исходные словари не изменяются).
     """
     result = {**base}
     for key, value in override.items():
@@ -224,32 +225,32 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def load_config(path: Path | str | None = None) -> AppConfig:
-    """Load and validate application configuration.
+    """Загружает и валидирует конфигурацию приложения.
 
-    Merges:
-    1. Pydantic defaults
-    2. ``config/default.yaml`` (if present)
-    3. *path* YAML (if provided)
+    Объединяет слои:
+    1. Значения по умолчанию Pydantic
+    2. ``config/default.yaml`` (если файл существует)
+    3. YAML по указанному *path* (если передан)
 
     Args:
-        path: Optional path to a project or scenario config YAML.
+        path: Необязательный путь к YAML-файлу конфигурации проекта или сценария.
 
     Returns:
-        Validated :class:`AppConfig` instance.
+        Валидированный экземпляр :class:`AppConfig`.
 
     Raises:
-        pydantic.ValidationError: If any config value fails validation.
-        FileNotFoundError: If *path* is provided but does not exist.
+        pydantic.ValidationError: Если значение конфигурации не прошло валидацию.
+        FileNotFoundError: Если *path* передан, но файл не существует.
     """
     merged: dict[str, Any] = {}
 
-    # Layer 1: built-in defaults file
+    # Слой 1: встроенный файл значений по умолчанию
     if _DEFAULTS_PATH.exists():
         with _DEFAULTS_PATH.open("r", encoding="utf-8") as fh:
             defaults = yaml.safe_load(fh) or {}
         merged = _deep_merge(merged, defaults)
 
-    # Layer 2: user-provided config
+    # Слой 2: конфигурация, предоставленная пользователем
     if path:
         path = Path(path)
         if not path.exists():
@@ -262,14 +263,14 @@ def load_config(path: Path | str | None = None) -> AppConfig:
 
 
 def merge_scenario_config(base: AppConfig, scenario_overrides: dict[str, Any]) -> AppConfig:
-    """Merge per-scenario config overrides on top of a base config.
+    """Накладывает переопределения конфигурации сценария поверх базовой конфигурации.
 
     Args:
-        base: Validated base configuration.
-        scenario_overrides: Raw dict from the scenario's ``config:`` key.
+        base: Валидированная базовая конфигурация.
+        scenario_overrides: Сырой словарь из ключа ``config:`` сценария.
 
     Returns:
-        New :class:`AppConfig` with overrides applied.
+        Новый экземпляр :class:`AppConfig` с применёнными переопределениями.
     """
     base_dict = base.model_dump()
     merged = _deep_merge(base_dict, scenario_overrides)

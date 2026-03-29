@@ -1,7 +1,8 @@
-"""Step dataclass — typed description of a single scenario step.
+"""Модель шага — типизированное описание одного шага сценария.
 
-Each step maps to one user action (click, type, assert, etc.) plus an optional
-element-finder specification (how to locate the target UI element).
+Каждый шаг соответствует одному пользовательскому действию (клик, ввод текста,
+проверка и т.д.) плюс опциональной спецификации поиска элемента (как найти
+целевой UI-элемент).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class RecoveryTrigger(str, Enum):
-    """Error condition that activates a recovery action."""
+    """Условие ошибки, активирующее действие восстановления."""
 
     ELEMENT_NOT_FOUND = "element_not_found"
     SCREEN_MISMATCH = "screen_mismatch"
@@ -21,18 +22,18 @@ class RecoveryTrigger(str, Enum):
 
 
 class RecoveryAction(BaseModel):
-    """A single recovery action executed when a step fails with a specific trigger.
+    """Одно действие восстановления, выполняемое при сбое шага с определённым триггером.
 
     Attributes:
-        trigger: Error condition that activates this recovery.
-        action: Strategy to apply — ``scroll_down``, ``scroll_up``,
-            ``press_escape``, ``press_key``, or ``screenshot_and_abort``.
-        retries: Maximum times this recovery may be applied (reserved for
-            future use; currently the first matching action is applied once
-            per retry attempt).
-        then: Optional post-recovery directive.  Currently supports
-            ``"goto:<step_id>"`` to jump execution to a named step.
-        keys: Key names to press (for ``press_key`` action).
+        trigger: Условие ошибки, активирующее это восстановление.
+        action: Применяемая стратегия — ``scroll_down``, ``scroll_up``,
+            ``press_escape``, ``press_key`` или ``screenshot_and_abort``.
+        retries: Максимальное число применений этого восстановления (зарезервировано
+            для будущего использования; сейчас первое совпадение применяется
+            однократно за попытку).
+        then: Опциональная директива после восстановления. Поддерживает
+            ``"goto:<step_id>"`` для перехода к именованному шагу.
+        keys: Имена клавиш для нажатия (для действия ``press_key``).
     """
 
     trigger: RecoveryTrigger
@@ -43,7 +44,7 @@ class RecoveryAction(BaseModel):
 
 
 class StepAction(str, Enum):
-    """Enumeration of all supported step actions."""
+    """Перечисление всех поддерживаемых действий шага."""
 
     CLICK = "click"
     DOUBLE_CLICK = "double_click"
@@ -62,7 +63,7 @@ class StepAction(str, Enum):
 
 
 class FindMethod(str, Enum):
-    """Vision method used to locate a UI element."""
+    """Метод компьютерного зрения для поиска UI-элемента."""
 
     OCR = "ocr"
     TEMPLATE = "template"
@@ -70,26 +71,26 @@ class FindMethod(str, Enum):
 
 
 class OnFailure(str, Enum):
-    """Behaviour when a step fails."""
+    """Поведение при сбое шага."""
 
-    ABORT = "abort"      # Stop the scenario immediately (default)
-    SKIP = "skip"        # Log the failure and continue to the next step
-    CONTINUE = "continue"  # Alias for skip; kept for readability in YAML
-    RETRY = "retry"      # Retry the step up to Step.retries times
+    ABORT = "abort"      # Немедленно остановить сценарий (по умолчанию)
+    SKIP = "skip"        # Записать ошибку и перейти к следующему шагу
+    CONTINUE = "continue"  # Псевдоним для skip; добавлен для читаемости YAML
+    RETRY = "retry"      # Повторить шаг до Step.retries раз
 
 
 class FindSpec(BaseModel):
-    """Specification for locating a UI element before acting on it.
+    """Спецификация поиска UI-элемента перед выполнением действия.
 
     Attributes:
-        method: Vision method to use (ocr, template, yolo).
-        query: Text to search via OCR, or path to template image.
-        template: Explicit template image path (alternative to query for template method).
-        threshold: Minimum confidence score (0.0–1.0).
-        region: Named region or [x, y, w, h] bounding box to restrict search.
-        offset: [dx, dy] pixel offset applied to the found element centre.
-        fuzzy: Whether to use fuzzy text matching for OCR results.
-        fuzzy_threshold: RapidFuzz score threshold (0–100).
+        method: Метод компьютерного зрения (ocr, template, yolo).
+        query: Текст для поиска через OCR или путь к шаблону.
+        template: Явный путь к шаблону (альтернатива query для метода template).
+        threshold: Минимальный порог уверенности (0.0–1.0).
+        region: Именованная область или ограничивающий прямоугольник [x, y, w, h].
+        offset: Смещение [dx, dy] в пикселях от центра найденного элемента.
+        fuzzy: Использовать ли нечёткое сопоставление текста для OCR.
+        fuzzy_threshold: Порог нечёткого сопоставления RapidFuzz (0–100).
     """
 
     method: FindMethod = FindMethod.OCR
@@ -104,31 +105,31 @@ class FindSpec(BaseModel):
     @field_validator("offset")
     @classmethod
     def validate_offset(cls, v: list[int] | None) -> list[int] | None:
-        """Ensure offset is exactly two integers if provided."""
+        """Проверяет, что смещение содержит ровно два целых числа (если задано)."""
         if v is not None and len(v) != 2:
             raise ValueError("offset must be a list of exactly 2 integers [dx, dy]")
         return v
 
 
 class Step(BaseModel):
-    """A single step in a scenario.
+    """Один шаг сценария.
 
     Attributes:
-        id: Unique identifier for this step within the scenario.
-        description: Human-readable description shown in logs.
-        action: The action to perform.
-        find: How to locate the target element (optional for some actions).
-        fallback: Alternative finder if the primary find fails.
-        text: Text to type (for ``type`` action).
-        keys: Key combination to press (for ``hotkey`` action).
-        target: Application path / URL (for ``launch`` action).
-        label: Screenshot label (for ``screenshot`` action).
-        wait: Duration in seconds (for ``wait`` action).
-        wait_after: Pause in seconds after action executes.
-        timeout: Override the global step timeout for this step.
-        on_failure: Behaviour when this step fails.
-        clear_first: Select-all + delete before typing (for ``type`` action).
-        extra: Arbitrary extra keys passed through from YAML.
+        id: Уникальный идентификатор шага внутри сценария.
+        description: Читаемое описание, отображаемое в логах.
+        action: Выполняемое действие.
+        find: Способ поиска целевого элемента (необязательно для ряда действий).
+        fallback: Альтернативный поиск при неудаче основного.
+        text: Текст для ввода (для действия ``type``).
+        keys: Комбинация клавиш (для действия ``hotkey``).
+        target: Путь/URL приложения (для действия ``launch``).
+        label: Метка скриншота (для действия ``screenshot``).
+        wait: Длительность в секундах (для действия ``wait``).
+        wait_after: Пауза в секундах после выполнения действия.
+        timeout: Переопределяет глобальный таймаут шага для этого шага.
+        on_failure: Поведение при сбое шага.
+        clear_first: Выделить всё и удалить перед вводом (для действия ``type``).
+        extra: Произвольные дополнительные ключи из YAML.
     """
 
     id: str
@@ -156,7 +157,7 @@ class Step(BaseModel):
     @field_validator("keys")
     @classmethod
     def validate_keys(cls, v: list[str] | None) -> list[str] | None:
-        """Ensure key names are non-empty strings."""
+        """Проверяет, что имена клавиш являются непустыми строками."""
         if v is not None:
             for key in v:
                 if not key.strip():

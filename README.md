@@ -1,63 +1,63 @@
 # ScreenWalker
 
-Vision-based RPA framework. Automates any UI by reading the screen —
-OCR, template matching, and YOLO detection. No DOM access, no APIs,
-no application-specific plugins required.
+Фреймворк RPA на основе компьютерного зрения. Автоматизирует любой интерфейс, читая экран —
+OCR, сопоставление шаблонов и YOLO-детекция. Не требует доступа к DOM, API
+и специфических плагинов для приложений.
 
 ---
 
-## 5-Minute Demo Quickstart
+## Быстрый старт: демо за 5 минут
 
-### Prerequisites
+### Предварительные требования
 
-| Requirement | Check |
+| Требование | Проверка |
 |-------------|-------|
 | Python 3.10+ | `python --version` |
 | Tesseract OCR | `tesseract --version` |
-| ScreenWalker dependencies | `pip install -e .` |
+| Зависимости ScreenWalker | `pip install -e .` |
 
-**Install Tesseract (Windows):**
-Download the installer from https://github.com/UB-Mannheim/tesseract/wiki and add it to `PATH`.
+**Установка Tesseract (Windows):**
+Скачайте установщик с https://github.com/UB-Mannheim/tesseract/wiki и добавьте его в `PATH`.
 
-**Install Tesseract (macOS):**
+**Установка Tesseract (macOS):**
 ```bash
 brew install tesseract
 ```
 
-**Install Tesseract (Linux):**
+**Установка Tesseract (Linux):**
 ```bash
 sudo apt install tesseract-ocr
 ```
 
-**Install Python dependencies:**
+**Установка зависимостей Python:**
 ```bash
 pip install -e ".[ocr]"
-# or manually:
+# или вручную:
 pip install pytesseract pillow pyautogui pyperclip rapidfuzz pydantic structlog click pyyaml numpy
 ```
 
 ---
 
-### Run the demos
+### Запуск демо
 
 ```bash
-# Both demos (Calculator + Notepad)
+# Оба демо (Calculator + Notepad)
 python scripts/run_demo.py
 
-# Calculator only  (7 + 3 = 10)
+# Только Calculator  (7 + 3 = 10)
 python scripts/run_demo.py --scenario calc
 
-# Notepad only  (type → copy → verify)
+# Только Notepad  (ввод → копирование → проверка)
 python scripts/run_demo.py --scenario notepad
 
-# Validate without executing any actions
+# Проверка без выполнения действий
 python scripts/run_demo.py --dry-run
 
-# Show debug engine logs
+# Показать отладочные логи движка
 python scripts/run_demo.py --verbose
 ```
 
-Or use the standard CLI directly:
+Или воспользуйтесь стандартным CLI напрямую:
 
 ```bash
 python -m screenwalker run scenarios/demo_calculator.yaml --config config/demo.yaml
@@ -66,34 +66,34 @@ python -m screenwalker run scenarios/demo_notepad.yaml   --config config/demo.ya
 
 ---
 
-### What the demos do
+### Что делают демо
 
-#### Calculator demo  (`scenarios/demo_calculator.yaml`)
+#### Демо Calculator  (`scenarios/demo_calculator.yaml`)
 
-1. Launches `calc.exe` (Windows Calculator in Standard mode)
-2. Waits for the UI to be visible (OCR finds "Calculator")
-3. Clicks button **7** via OCR text search
-4. Clicks button **+** via OCR text search
-5. Clicks button **3** via OCR text search
-6. Clicks button **=** via OCR text search
-7. Reads the result display with OCR — asserts it equals **"10"**
-8. Saves a screenshot to `logs/demo/`
+1. Запускает `calc.exe` (Калькулятор Windows в стандартном режиме)
+2. Ожидает появления интерфейса (OCR находит "Calculator")
+3. Нажимает кнопку **7** через поиск текста по OCR
+4. Нажимает кнопку **+** через поиск текста по OCR
+5. Нажимает кнопку **3** через поиск текста по OCR
+6. Нажимает кнопку **=** через поиск текста по OCR
+7. Считывает результат с помощью OCR — проверяет, что он равен **"10"**
+8. Сохраняет снимок экрана в `logs/demo/`
 
-#### Notepad demo  (`scenarios/demo_notepad.yaml`)
+#### Демо Notepad  (`scenarios/demo_notepad.yaml`)
 
-1. Launches `notepad.exe`
-2. Waits for the editor window (OCR finds "Notepad")
-3. Types **"Hello from Screenwalker!"** into the text area
-4. OCR asserts the text is visible on screen
-5. Presses `Ctrl+A` to select all
-6. Copies to clipboard via `Ctrl+C` — stores in context variable `clipboard_text`
-7. OCR-asserts the text still matches the expected string
-8. Saves a screenshot
-9. Closes with `Alt+F4` and clicks **"Don't Save"**
+1. Запускает `notepad.exe`
+2. Ожидает появления окна редактора (OCR находит "Notepad")
+3. Вводит **"Hello from Screenwalker!"** в текстовую область
+4. OCR проверяет, что текст виден на экране
+5. Нажимает `Ctrl+A` для выделения всего текста
+6. Копирует в буфер обмена через `Ctrl+C` — сохраняет в переменную контекста `clipboard_text`
+7. OCR проверяет, что текст по-прежнему совпадает с ожидаемой строкой
+8. Сохраняет снимок экрана
+9. Закрывает приложение через `Alt+F4` и нажимает **"Don't Save"**
 
 ---
 
-### Expected output
+### Ожидаемый вывод
 
 ```
 ╭──────────────────────────────────────────────────────╮
@@ -122,30 +122,30 @@ python -m screenwalker run scenarios/demo_notepad.yaml   --config config/demo.ya
   ✓  All 2 demo(s) passed (22.2s total)
 ```
 
-Logs and screenshots are saved to `logs/demo/`.
+Логи и снимки экрана сохраняются в `logs/demo/`.
 
 ---
 
-### Troubleshooting
+### Устранение неполадок
 
-| Symptom | Fix |
+| Симптом | Решение |
 |---------|-----|
-| `tesseract: command not found` | Install Tesseract and add to PATH |
+| `tesseract: command not found` | Установите Tesseract и добавьте его в PATH |
 | `ModuleNotFoundError: pytesseract` | `pip install pytesseract` |
-| `ElementNotFound: "Calculator"` | Make sure Calculator opened in Standard mode; try `--verbose` |
-| OCR finds wrong "7" (e.g. in title bar) | Open Calculator first so the screen is clean; or add a `region` to the find spec |
-| Calculator opens in History/Scientific mode | Switch to Standard mode manually, or pass `--var` override |
-| Notepad "Don't Save" not found | Windows 10: try `query: "Don't Save"` — Windows 11 text may vary |
-| `pyautogui.FailSafeException` | Move mouse away from top-left corner; or set `pyautogui.FAILSAFE = False` |
-| `import pyautogui` fails on Linux | `sudo apt install python3-tk python3-dev` |
+| `ElementNotFound: "Calculator"` | Убедитесь, что Калькулятор открыт в стандартном режиме; попробуйте `--verbose` |
+| OCR находит не ту "7" (например, в строке заголовка) | Сначала откройте Калькулятор, чтобы экран был чистым; или добавьте `region` в спецификацию поиска |
+| Калькулятор открывается в режиме Журнала/Инженерном | Вручную переключитесь в стандартный режим или передайте переопределение через `--var` |
+| Кнопка "Don't Save" в Notepad не найдена | Windows 10: попробуйте `query: "Don't Save"` — в Windows 11 текст кнопки может отличаться |
+| `pyautogui.FailSafeException` | Уберите мышь из верхнего левого угла; или установите `pyautogui.FAILSAFE = False` |
+| `import pyautogui` завершается ошибкой на Linux | `sudo apt install python3-tk python3-dev` |
 
 ---
 
-### Adapting the demos
+### Адаптация демо
 
 #### macOS
 
-Change `target` in both scenarios:
+Измените `target` в обоих сценариях:
 
 ```yaml
 # Calculator
@@ -167,9 +167,9 @@ target: "gedit"
 
 ---
 
-## Writing your own scenarios
+## Создание собственных сценариев
 
-A scenario is a YAML file. Minimal example:
+Сценарий — это YAML-файл. Минимальный пример:
 
 ```yaml
 name: My Automation
@@ -189,26 +189,26 @@ steps:
     wait_after: 1.0
 ```
 
-### Available actions
+### Доступные действия
 
-| Action | What it does | Required fields |
+| Действие | Что делает | Обязательные поля |
 |--------|-------------|-----------------|
-| `launch` | Start an application | `target` |
-| `click` | Left-click a located element | `find` |
-| `double_click` | Double-click | `find` |
-| `right_click` | Right-click | `find` |
-| `type` | Type text | `text` |
-| `hotkey` | Key combination | `keys` |
-| `scroll` | Scroll at element | `find` (optional), `extra.direction`, `extra.clicks` |
-| `drag` | Drag to position | `find`, `extra.to` |
-| `copy` | Ctrl+C → clipboard | — |
+| `launch` | Запускает приложение | `target` |
+| `click` | Левый клик по найденному элементу | `find` |
+| `double_click` | Двойной клик | `find` |
+| `right_click` | Правый клик | `find` |
+| `type` | Вводит текст | `text` |
+| `hotkey` | Комбинация клавиш | `keys` |
+| `scroll` | Прокрутка у элемента | `find` (необязательно), `extra.direction`, `extra.clicks` |
+| `drag` | Перетаскивание в позицию | `find`, `extra.to` |
+| `copy` | Ctrl+C → буфер обмена | — |
 | `paste` | Ctrl+V | — |
-| `assert_visible` | Assert element is on screen | `find` |
-| `assert_text` | Assert OCR text matches | `find`, `text` |
-| `wait` | Sleep | `wait` (seconds) |
-| `screenshot` | Save screenshot | `label` (optional) |
+| `assert_visible` | Проверяет наличие элемента на экране | `find` |
+| `assert_text` | Проверяет совпадение текста по OCR | `find`, `text` |
+| `wait` | Пауза | `wait` (секунды) |
+| `screenshot` | Сохраняет снимок экрана | `label` (необязательно) |
 
-### Find methods
+### Методы поиска
 
 ```yaml
 find:
@@ -221,10 +221,10 @@ find:
   offset: [dx, dy]     # pixel offset from found centre
 ```
 
-### Variables
+### Переменные
 
-Variables are defined in the `variables:` section and interpolated
-with `{{ var_name }}` syntax:
+Переменные определяются в секции `variables:` и подставляются
+с помощью синтаксиса `{{ var_name }}`:
 
 ```yaml
 variables:
@@ -236,14 +236,14 @@ steps:
     text: "{{ username }}"
 ```
 
-Override from command line:
+Переопределение через командную строку:
 ```bash
 python -m screenwalker run scenario.yaml --var username=myuser
 ```
 
-### Screen fingerprints
+### Отпечатки экрана
 
-Verify the UI is in the right state before acting:
+Проверяйте, что интерфейс находится в нужном состоянии, перед выполнением действий:
 
 ```yaml
 screens:
@@ -261,60 +261,60 @@ steps:
 
 ---
 
-## CLI reference
+## Справочник CLI
 
 ```bash
-# Run a scenario
+# Запуск сценария
 python -m screenwalker run SCENARIO [--config CONFIG] [--dry-run] [--var KEY=VALUE ...]
 
-# Validate without running
+# Проверка без запуска
 python -m screenwalker validate SCENARIO
 
-# Capture a template image
+# Захват шаблонного изображения
 python -m screenwalker capture-template --name ok_button --region 100,200,80,30 --delay 3
 
-# Analyse execution logs
+# Анализ логов выполнения
 python -m screenwalker analyze logs/
 
-# Suggest synonym entries for OCR mismatches
+# Предложить синонимы для ошибок OCR
 python -m screenwalker suggest-synonyms logs/
 
-# Version
+# Версия
 python -m screenwalker --version
 ```
 
 ---
 
-## Project structure
+## Структура проекта
 
 ```
 screenwalker/
 ├── config/
-│   ├── default.yaml          ← default configuration
-│   ├── demo.yaml             ← demo-optimised config
-│   └── synonyms.yaml         ← OCR synonym groups (33 groups, en+ru)
+│   ├── default.yaml          ← конфигурация по умолчанию
+│   ├── demo.yaml             ← конфигурация, оптимизированная для демо
+│   └── synonyms.yaml         ← группы синонимов OCR (33 группы, en+ru)
 ├── scenarios/
-│   ├── example_scenario.yaml ← Notepad automation example
-│   ├── demo_calculator.yaml  ← Calculator demo (7+3=10)
-│   └── demo_notepad.yaml     ← Notepad clipboard demo
+│   ├── example_scenario.yaml ← пример автоматизации Notepad
+│   ├── demo_calculator.yaml  ← демо Calculator (7+3=10)
+│   └── demo_notepad.yaml     ← демо Notepad с буфером обмена
 ├── scripts/
-│   ├── run_demo.py           ← pretty demo runner
-│   ├── download_model.py     ← download OmniParser V2 YOLO weights
-│   └── train_detector.py     ← fine-tune YOLO on custom screenshots
-├── templates/                ← PNG templates for template matching
+│   ├── run_demo.py           ← красивый запускатель демо
+│   ├── download_model.py     ← загрузка весов YOLO OmniParser V2
+│   └── train_detector.py     ← дообучение YOLO на пользовательских скриншотах
+├── templates/                ← PNG-шаблоны для сопоставления шаблонов
 ├── screenwalker/
-│   ├── core/                 ← ScenarioEngine, Step, RunContext, errors
-│   ├── vision/               ← OCR, template matching, YOLO detector, screen state
-│   ├── actions/              ← mouse, keyboard, clipboard controllers
-│   ├── learning/             ← action cache, step logger, pattern learner
-│   ├── matching/             ← fuzzy matcher, synonym registry
-│   └── utils/                ← config, retry
-└── tests/                    ← 464 tests, 81% coverage
+│   ├── core/                 ← ScenarioEngine, Step, RunContext, ошибки
+│   ├── vision/               ← OCR, сопоставление шаблонов, YOLO-детектор, состояние экрана
+│   ├── actions/              ← контроллеры мыши, клавиатуры и буфера обмена
+│   ├── learning/             ← кэш действий, логгер шагов, анализатор паттернов
+│   ├── matching/             ← нечёткое сопоставление, реестр синонимов
+│   └── utils/                ← конфигурация, повторные попытки
+└── tests/                    ← 464 теста, покрытие 81%
 ```
 
 ---
 
-## Architecture overview
+## Обзор архитектуры
 
 ```
 YAML scenario
@@ -348,31 +348,31 @@ teardown steps (always run)
 
 ---
 
-## Optional: YOLO detection
+## Дополнительно: YOLO-детекция
 
-For richer UI element discovery (icons, checkboxes, sliders without visible text):
+Для более широкого обнаружения элементов интерфейса (иконки, чекбоксы, слайдеры без видимого текста):
 
 ```bash
-# Download OmniParser V2 weights (~25 MB)
+# Загрузка весов OmniParser V2 (~25 МБ)
 python scripts/download_model.py
 
-# Enable in config/demo.yaml:
+# Включение в config/demo.yaml:
 # vision:
 #   yolo_enabled: true
 #   yolo_model_path: models/icon_detect/best.pt
 #   yolo_confidence: 0.50
 ```
 
-Then use `method: yolo` in find specs, or benefit from the automatic YOLO
-fallback that kicks in when OCR and template matching both fail.
+Затем используйте `method: yolo` в спецификациях поиска или воспользуйтесь автоматическим
+резервным переходом на YOLO, который срабатывает, когда OCR и сопоставление шаблонов не дают результата.
 
 ---
 
-## Running tests
+## Запуск тестов
 
 ```bash
 pip install -e ".[dev]"
-pytest                        # all 464 tests
-pytest tests/test_detector.py # YOLO detector tests only
-pytest --tb=short -q          # compact output with coverage report
+pytest                        # все 464 теста
+pytest tests/test_detector.py # только тесты YOLO-детектора
+pytest --tb=short -q          # компактный вывод с отчётом о покрытии
 ```

@@ -1,8 +1,8 @@
-"""RunContext — mutable runtime state for a single scenario execution.
+"""RunContext — изменяемое состояние выполнения одного сценария.
 
-The context is threaded through every step and vision call so that all
-components share the same variables, history, and screenshots without
-tight coupling to each other.
+Контекст передаётся через каждый шаг и вызов компьютерного зрения, чтобы все
+компоненты разделяли одни переменные, историю и скриншоты без
+жёсткой связи друг с другом.
 """
 
 from __future__ import annotations
@@ -18,16 +18,16 @@ from PIL import Image
 
 @dataclass
 class StepRecord:
-    """Immutable record of a completed step execution.
+    """Неизменяемая запись о выполненном шаге.
 
     Attributes:
-        step_id: Identifier of the step.
-        action: Action string (e.g. "click").
-        success: Whether the step completed without error.
-        elapsed: Wall-clock time in seconds.
-        screenshot_path: Path to the screenshot taken after this step (if any).
-        error: Error message if the step failed.
-        metadata: Arbitrary key-value pairs for debugging.
+        step_id: Идентификатор шага.
+        action: Строка действия (например, "click").
+        success: Завершился ли шаг без ошибок.
+        elapsed: Реальное время выполнения в секундах.
+        screenshot_path: Путь к скриншоту после шага (если есть).
+        error: Сообщение об ошибке при неуспешном шаге.
+        metadata: Произвольные пары ключ-значение для отладки.
     """
 
     step_id: str
@@ -40,21 +40,21 @@ class StepRecord:
 
 
 class RunContext:
-    """Holds all mutable state for a single scenario run.
+    """Хранит всё изменяемое состояние одного запуска сценария.
 
-    The context is intentionally *not* a frozen dataclass — steps need to
-    update variables, push history records, and cache screenshots during
-    execution.
+    Контекст намеренно не является frozen dataclass — шаги должны
+    обновлять переменные, добавлять записи истории и кэшировать скриншоты
+    в процессе выполнения.
 
     Attributes:
-        scenario_name: Human-readable scenario name from YAML.
-        run_id: Unique run identifier (timestamp-based).
-        variables: Mutable variable bag interpolated into step text/queries.
-        history: Ordered list of step execution records.
-        current_screen: Identifier of the last detected screen state.
-        last_screenshot: Most recent captured PIL image.
-        output_dir: Directory where logs and screenshots are written.
-        dry_run: When True, actions are logged but not executed.
+        scenario_name: Читаемое имя сценария из YAML.
+        run_id: Уникальный идентификатор запуска (на основе временной метки).
+        variables: Изменяемый набор переменных, подставляемых в текст и запросы шагов.
+        history: Упорядоченный список записей о выполненных шагах.
+        current_screen: Идентификатор последнего обнаруженного состояния экрана.
+        last_screenshot: Последний захваченный PIL-образ.
+        output_dir: Директория для записи логов и скриншотов.
+        dry_run: Если True, действия логируются, но не выполняются.
     """
 
     def __init__(
@@ -64,13 +64,13 @@ class RunContext:
         output_dir: Path | None = None,
         dry_run: bool = False,
     ) -> None:
-        """Initialize RunContext.
+        """Инициализация RunContext.
 
         Args:
-            scenario_name: Name of the scenario being executed.
-            variables: Initial variable dictionary (from YAML + CLI overrides).
-            output_dir: Root directory for logs and screenshots.
-            dry_run: Whether to skip actual action execution.
+            scenario_name: Имя выполняемого сценария.
+            variables: Начальный словарь переменных (из YAML и переопределений CLI).
+            output_dir: Корневая директория для логов и скриншотов.
+            dry_run: Пропускать ли фактическое выполнение действий.
         """
         self.scenario_name = scenario_name
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -82,25 +82,25 @@ class RunContext:
         self.dry_run = dry_run
 
     # ------------------------------------------------------------------
-    # Variable interpolation
+    # Подстановка переменных
     # ------------------------------------------------------------------
 
     def interpolate(self, text: str) -> str:
-        """Replace ``{{ variable_name }}`` placeholders in *text*.
+        """Заменяет плейсхолдеры ``{{ variable_name }}`` в строке *text*.
 
         Args:
-            text: Template string potentially containing ``{{ var }}`` tokens.
+            text: Шаблонная строка, содержащая токены ``{{ var }}``.
 
         Returns:
-            String with all known variables substituted. Unknown variables
-            are left as-is.
+            Строка с подставленными известными переменными. Неизвестные переменные
+            остаются без изменений.
 
         Example:
             >>> ctx = RunContext("demo", variables={"user": "admin"})
             >>> ctx.interpolate("Hello {{ user }}!")
             'Hello admin!'
         """
-        # TODO: implement Jinja2-style substitution using self.variables
+        # TODO: реализовать подстановку в стиле Jinja2 через self.variables
         def replace(match: re.Match[str]) -> str:
             key = match.group(1).strip()
             return self.variables.get(key, match.group(0))
@@ -108,49 +108,49 @@ class RunContext:
         return re.sub(r"\{\{\s*(\w+)\s*\}\}", replace, text)
 
     def set_variable(self, key: str, value: str) -> None:
-        """Set or update a runtime variable.
+        """Устанавливает или обновляет переменную времени выполнения.
 
         Args:
-            key: Variable name.
-            value: New value (always stored as a string).
+            key: Имя переменной.
+            value: Новое значение (всегда сохраняется как строка).
         """
         self.variables[key] = value
 
     # ------------------------------------------------------------------
-    # History management
+    # Управление историей
     # ------------------------------------------------------------------
 
     def record_step(self, record: StepRecord) -> None:
-        """Append a completed step record to the execution history.
+        """Добавляет запись о выполненном шаге в историю.
 
         Args:
-            record: The :class:`StepRecord` to append.
+            record: Экземпляр :class:`StepRecord` для добавления.
         """
         self.history.append(record)
 
     @property
     def failed_steps(self) -> list[StepRecord]:
-        """Return all step records that represent failures."""
+        """Возвращает все записи шагов, завершившихся с ошибкой."""
         return [r for r in self.history if not r.success]
 
     @property
     def step_count(self) -> int:
-        """Total number of executed steps (successful + failed)."""
+        """Общее число выполненных шагов (успешных и неуспешных)."""
         return len(self.history)
 
     # ------------------------------------------------------------------
-    # Screenshot helpers
+    # Вспомогательные методы для скриншотов
     # ------------------------------------------------------------------
 
     def save_screenshot(self, image: Image.Image, label: str = "step") -> Path:
-        """Persist a PIL image to the run output directory.
+        """Сохраняет PIL-образ в директорию вывода текущего запуска.
 
         Args:
-            image: PIL image to save.
-            label: Filename label (step id or description slug).
+            image: PIL-образ для сохранения.
+            label: Метка для имени файла (идентификатор шага или описание).
 
         Returns:
-            Absolute path of the saved file.
+            Абсолютный путь к сохранённому файлу.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         safe = label.replace(" ", "_").replace("/", "-").replace("\\", "-")
@@ -159,10 +159,10 @@ class RunContext:
         return path.resolve()
 
     def update_screenshot(self, image: Image.Image) -> None:
-        """Update the cached last screenshot.
+        """Обновляет кэшированный последний скриншот.
 
         Args:
-            image: The latest captured screen image.
+            image: Последний захваченный образ экрана.
         """
         self.last_screenshot = image
 

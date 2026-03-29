@@ -1,10 +1,10 @@
-"""Clipboard read/write utilities.
+"""Утилиты чтения/записи буфера обмена.
 
-Uses ``pyperclip`` for cross-platform clipboard access and ``pyautogui`` for
-the copy/paste keyboard shortcuts.
+Использует ``pyperclip`` для кросс-платформенного доступа к буферу обмена и
+``pyautogui`` для горячих клавиш копирования/вставки.
 
-Implements :class:`~screenwalker.actions.protocols.ClipboardProtocol` so the
-manager can be replaced with an RDP-backed implementation.
+Реализует :class:`~screenwalker.actions.protocols.ClipboardProtocol`, что позволяет
+заменять менеджер реализацией на базе RDP.
 """
 
 from __future__ import annotations
@@ -22,59 +22,59 @@ _PLATFORM = platform.system()
 
 
 class ClipboardManager:
-    """Cross-platform clipboard read/write manager.
+    """Кросс-платформенный менеджер чтения/записи буфера обмена.
 
     Attributes:
-        settle_delay: Seconds to wait after triggering a copy shortcut before
-            reading the clipboard (allows the OS to complete the operation).
+        settle_delay: Секунды ожидания после срабатывания горячей клавиши копирования
+            перед чтением буфера (даёт ОС время завершить операцию).
     """
 
     def __init__(self, settle_delay: float = 0.2) -> None:
-        """Initialise ClipboardManager.
+        """Инициализация ClipboardManager.
 
         Args:
-            settle_delay: Seconds to wait after a copy trigger before reading.
+            settle_delay: Секунды ожидания после инициации копирования перед чтением.
         """
         self.settle_delay = settle_delay
 
     # ------------------------------------------------------------------
-    # Low-level read / write
+    # Низкоуровневое чтение / запись
     # ------------------------------------------------------------------
 
     def read(self) -> str:
-        """Read the current clipboard contents as a string.
+        """Читает текущее содержимое буфера обмена как строку.
 
         Returns:
-            Clipboard text, or an empty string if the clipboard is empty or
-            does not contain text data.
+            Текст из буфера обмена или пустая строка, если буфер пуст
+            или не содержит текстовых данных.
         """
         result = pyperclip.paste()
         return result if result is not None else ""
 
     def write(self, text: str) -> None:
-        """Write *text* to the clipboard.
+        """Записывает *text* в буфер обмена.
 
         Args:
-            text: String to place on the clipboard.
+            text: Строка для размещения в буфере обмена.
         """
         logger.debug("Writing to clipboard", length=len(text))
         pyperclip.copy(text)
 
     # ------------------------------------------------------------------
-    # Copy-then-read helpers
+    # Вспомогательные методы копирования с последующим чтением
     # ------------------------------------------------------------------
 
     def copy_selected(self, select_all: bool = False) -> str:
-        """Copy the current on-screen selection to the clipboard and read it.
+        """Копирует текущее выделение на экране в буфер обмена и возвращает его.
 
-        Optionally sends Ctrl+A first to select all text in the focused
-        element, then Ctrl+C, waits :attr:`settle_delay`, and reads the result.
+        При необходимости сначала отправляет Ctrl+A для выделения всего текста
+        в активном элементе, затем Ctrl+C, ожидает :attr:`settle_delay` и читает результат.
 
         Args:
-            select_all: If *True*, send Ctrl+A before Ctrl+C.
+            select_all: Если *True*, отправить Ctrl+A перед Ctrl+C.
 
         Returns:
-            Text that was copied from the screen.
+            Текст, скопированный с экрана.
         """
         if select_all:
             if _PLATFORM == "Darwin":
@@ -98,43 +98,43 @@ class ClipboardManager:
         y: int,
         select_all: bool = False,
     ) -> str:
-        """Click at *(x, y)*, optionally select all, copy, and read the clipboard.
+        """Кликает в *(x, y)*, опционально выделяет всё, копирует и читает буфер.
 
-        Sequence: click → (optional Ctrl+A) → Ctrl+C → wait → read.
+        Последовательность: клик → (опциональный Ctrl+A) → Ctrl+C → ожидание → чтение.
 
         Args:
-            x: Horizontal screen coordinate to click.
-            y: Vertical screen coordinate to click.
-            select_all: If *True*, send Ctrl+A after clicking.
+            x: Горизонтальная координата экрана для клика.
+            y: Вертикальная координата экрана для клика.
+            select_all: Если *True*, отправить Ctrl+A после клика.
 
         Returns:
-            Text copied from the element at *(x, y)*.
+            Текст, скопированный из элемента в *(x, y)*.
         """
         pyautogui.click(x, y)
         return self.copy_selected(select_all=select_all)
 
     # ------------------------------------------------------------------
-    # Paste helper
+    # Вспомогательный метод вставки
     # ------------------------------------------------------------------
 
     def paste(self) -> None:
-        """Paste clipboard contents at the current cursor position via Ctrl+V."""
+        """Вставляет содержимое буфера обмена в текущую позицию курсора через Ctrl+V."""
         if _PLATFORM == "Darwin":
             pyautogui.hotkey("command", "v")
         else:
             pyautogui.hotkey("ctrl", "v")
 
     def clear(self) -> None:
-        """Clear the clipboard by writing an empty string."""
+        """Очищает буфер обмена записью пустой строки."""
         self.write("")
 
     # ------------------------------------------------------------------
-    # Backward-compatible alias
+    # Устаревший псевдоним
     # ------------------------------------------------------------------
 
     def read_selection(self) -> str:
-        """Alias for :meth:`copy_selected` (no select-all).
+        """Псевдоним для :meth:`copy_selected` (без select-all).
 
-        Deprecated: use :meth:`copy_selected` directly.
+        Устарел: используйте :meth:`copy_selected` напрямую.
         """
         return self.copy_selected(select_all=False)

@@ -3,7 +3,11 @@
     "allow": [
       "Bash(pip install:*)",
       "Bash(python:*)",
-      "Bash(C:/Python314/Scripts/pip install:*)"
+      "Bash(C:/Python314/Scripts/pip install:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/User/PycharmProjects/screenwalker/**)",
+      "Bash(done)"
     ]
   }
 }

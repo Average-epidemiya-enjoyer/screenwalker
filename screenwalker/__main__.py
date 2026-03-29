@@ -1,6 +1,6 @@
-"""CLI entry point for ScreenWalker.
+"""Точка входа CLI для ScreenWalker.
 
-Usage:
+Использование:
     python -m screenwalker run scenario.yaml
     python -m screenwalker run scenario.yaml --config config/default.yaml
     python -m screenwalker run scenario.yaml --dry-run
@@ -27,7 +27,7 @@ logger = structlog.get_logger(__name__)
 @click.group()
 @click.version_option(version=__version__, prog_name="screenwalker")
 def main() -> None:
-    """ScreenWalker — vision-based RPA framework."""
+    """ScreenWalker — RPA-фреймворк на основе компьютерного зрения."""
 
 
 @main.command()
@@ -37,27 +37,27 @@ def main() -> None:
     "-c",
     type=click.Path(exists=True, path_type=Path),
     default=None,
-    help="Path to a YAML config file (merged on top of defaults).",
+    help="Путь к YAML-файлу конфигурации (накладывается поверх значений по умолчанию).",
 )
 @click.option(
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Validate scenario and print planned steps without executing actions.",
+    help="Валидировать сценарий и вывести запланированные шаги без выполнения действий.",
 )
 @click.option(
     "--log-level",
     type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
     default="info",
     show_default=True,
-    help="Logging verbosity level.",
+    help="Уровень детализации логирования.",
 )
 @click.option(
     "--var",
     "-v",
     multiple=True,
     metavar="KEY=VALUE",
-    help="Override scenario variable (repeatable). Example: --var username=admin",
+    help="Переопределить переменную сценария (можно указывать несколько раз). Пример: --var username=admin",
 )
 def run(
     scenario: Path,
@@ -66,9 +66,9 @@ def run(
     log_level: str,
     var: tuple[str, ...],
 ) -> None:
-    """Execute a YAML scenario file.
+    """Выполнить YAML-файл сценария.
 
-    SCENARIO is the path to the scenario YAML file to run.
+    SCENARIO — путь к YAML-файлу сценария для запуска.
     """
     _configure_logging(log_level)
 
@@ -99,7 +99,7 @@ def run(
     "-c",
     type=click.Path(exists=True, path_type=Path),
     default=None,
-    help="Path to a YAML config file.",
+    help="Путь к YAML-файлу конфигурации.",
 )
 @click.option(
     "--log-level",
@@ -112,9 +112,9 @@ def validate(
     config: Path | None,
     log_level: str,
 ) -> None:
-    """Parse and validate a scenario YAML without executing any actions.
+    """Разобрать и валидировать YAML сценария без выполнения каких-либо действий.
 
-    Exits with code 0 on success, 1 on validation error.
+    Завершается с кодом 0 при успехе, 1 при ошибке валидации.
     """
     _configure_logging(log_level)
     log = structlog.get_logger(__name__)
@@ -143,14 +143,14 @@ def validate(
     "--name",
     "-n",
     required=True,
-    help="Template name (saved as templates/<name>.png).",
+    help="Имя шаблона (сохраняется как templates/<name>.png).",
 )
 @click.option(
     "--region",
     "-r",
     required=True,
     metavar="X,Y,W,H",
-    help="Screen region to capture: left,top,width,height (pixels).",
+    help="Регион экрана для захвата: left,top,width,height (пиксели).",
 )
 @click.option(
     "--output-dir",
@@ -158,7 +158,7 @@ def validate(
     type=click.Path(path_type=Path),
     default=Path("templates"),
     show_default=True,
-    help="Directory to save the template image.",
+    help="Директория для сохранения изображения шаблона.",
 )
 @click.option(
     "--delay",
@@ -166,7 +166,7 @@ def validate(
     type=float,
     default=0.3,
     show_default=True,
-    help="Seconds to wait before capturing (gives time to position the UI).",
+    help="Секунды ожидания перед захватом (время для позиционирования UI).",
 )
 def capture_template(
     name: str,
@@ -174,12 +174,12 @@ def capture_template(
     output_dir: Path,
     delay: float,
 ) -> None:
-    """Capture a screen region and save it as a named template image.
+    """Захватить регион экрана и сохранить его как именованное изображение-шаблон.
 
-    Example:
+    Пример:
         python -m screenwalker capture-template --name ok_button --region 100,200,80,30
     """
-    # Parse region
+    # Парсим регион
     try:
         parts = [int(p.strip()) for p in region.split(",")]
         if len(parts) != 4:
@@ -301,12 +301,12 @@ def report(
     show_default=True,
 )
 def analyze(log_dir: Path, log_level: str) -> None:
-    """Analyse execution logs in LOG_DIR and print a learning report.
+    """Проанализировать логи выполнения в LOG_DIR и вывести отчёт об обучении.
 
-    Reads all steps.jsonl files found under LOG_DIR, aggregates step
-    statistics, detects OCR mismatches, and suggests timeout optimisations.
+    Читает все файлы steps.jsonl в LOG_DIR, агрегирует статистику шагов,
+    обнаруживает OCR-расхождения и предлагает оптимизации таймаутов.
 
-    Example:
+    Пример:
 
         python -m screenwalker analyze logs/
     """
@@ -329,7 +329,7 @@ def analyze(log_dir: Path, log_level: str) -> None:
     type=int,
     default=1,
     show_default=True,
-    help="Minimum observation count to include a candidate.",
+    help="Минимальное количество наблюдений для включения кандидата.",
 )
 @click.option(
     "--log-level",
@@ -338,13 +338,13 @@ def analyze(log_dir: Path, log_level: str) -> None:
     show_default=True,
 )
 def suggest_synonyms(log_dir: Path, min_count: int, log_level: str) -> None:
-    """Suggest new synonym entries based on OCR mismatches in LOG_DIR.
+    """Предложить новые записи синонимов на основе OCR-расхождений в LOG_DIR.
 
-    Analyses steps.jsonl files and prints pairs where the OCR reading
-    differed from the expected text — these are candidates for the
-    config/synonyms.yaml dictionary.
+    Анализирует файлы steps.jsonl и выводит пары, где OCR-чтение
+    отличалось от ожидаемого текста — это кандидаты для словаря
+    config/synonyms.yaml.
 
-    Example:
+    Пример:
 
         python -m screenwalker suggest-synonyms logs/
     """
@@ -377,13 +377,13 @@ def suggest_synonyms(log_dir: Path, min_count: int, log_level: str) -> None:
 
 
 def _parse_var_overrides(var: tuple[str, ...]) -> dict[str, str]:
-    """Parse ``KEY=VALUE`` pairs from --var options.
+    """Разбирает пары ``KEY=VALUE`` из опций --var.
 
     Args:
-        var: Tuple of raw ``KEY=VALUE`` strings.
+        var: Кортеж «сырых» строк в формате ``KEY=VALUE``.
 
     Returns:
-        Dict of variable overrides.
+        Словарь переопределений переменных.
     """
     overrides: dict[str, str] = {}
     for pair in var:
@@ -396,10 +396,10 @@ def _parse_var_overrides(var: tuple[str, ...]) -> dict[str, str]:
 
 
 def _configure_logging(level: str) -> None:
-    """Configure structlog with the requested verbosity.
+    """Настраивает structlog с запрошенным уровнем детализации.
 
     Args:
-        level: One of debug | info | warning | error.
+        level: Одно из значений: debug | info | warning | error.
     """
     import logging
 

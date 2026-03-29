@@ -1,7 +1,7 @@
-"""Input abstraction protocols for future RDP/remote-input backends.
+"""Протоколы абстракции ввода для будущих RDP/remote-input бэкендов.
 
-Define structural interfaces for mouse, keyboard, and clipboard so concrete
-implementations (PyAutoGUI, RDP, VNC…) can be swapped transparently.
+Определяют структурные интерфейсы для мыши, клавиатуры и буфера обмена,
+чтобы конкретные реализации (PyAutoGUI, RDP, VNC…) можно было менять прозрачно.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class MouseInputProtocol(Protocol):
-    """Structural protocol for mouse input backends."""
+    """Структурный протокол для бэкендов управления мышью."""
 
     def click(self, x: int, y: int, button: str = "left", clicks: int = 1) -> None: ...
 
@@ -32,7 +32,7 @@ class MouseInputProtocol(Protocol):
 
 @runtime_checkable
 class KeyboardInputProtocol(Protocol):
-    """Structural protocol for keyboard input backends."""
+    """Структурный протокол для бэкендов управления клавиатурой."""
 
     def type_text(self, text: str, interval: float = 0.05) -> None: ...
 
@@ -47,7 +47,7 @@ class KeyboardInputProtocol(Protocol):
 
 @runtime_checkable
 class ClipboardProtocol(Protocol):
-    """Structural protocol for clipboard backends."""
+    """Структурный протокол для бэкендов буфера обмена."""
 
     def read(self) -> str: ...
 

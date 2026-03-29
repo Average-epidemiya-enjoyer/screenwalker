@@ -1,9 +1,9 @@
-"""Screen and window capture utilities.
+"""Утилиты захвата экрана и окон.
 
-Provides both a :class:`ScreenCapture` class (recommended) and module-level
-convenience functions that delegate to a default instance.
+Предоставляет как класс :class:`ScreenCapture` (рекомендуется), так и
+модульные функции-обёртки для делегирования к экземпляру по умолчанию.
 
-All returned images are ``PIL.Image.Image`` objects in RGB mode.
+Все возвращаемые изображения — объекты ``PIL.Image.Image`` в режиме RGB.
 """
 
 from __future__ import annotations
@@ -24,12 +24,12 @@ logger = structlog.get_logger(__name__)
 
 
 class WindowInfo(NamedTuple):
-    """Basic metadata about a captured window.
+    """Базовые метаданные о захваченном окне.
 
     Attributes:
-        title: Window title string.
-        bbox: Position and size of the window on screen.
-        pid: OS process ID owning the window (if available).
+        title: Строка заголовка окна.
+        bbox: Положение и размер окна на экране.
+        pid: Идентификатор процесса ОС, владеющего окном (если доступен).
     """
 
     title: str
@@ -38,11 +38,11 @@ class WindowInfo(NamedTuple):
 
 
 class ScreenCapture:
-    """Cross-platform screenshot helper with per-step image caching.
+    """Кросс-платформенный помощник для скриншотов с кэшированием изображений по шагам.
 
     Attributes:
-        screenshot_delay: Seconds to pause before each capture (UI settle time).
-        debug_dir: Directory for :meth:`save_debug` output.
+        screenshot_delay: Секунды паузы перед каждым захватом (время стабилизации UI).
+        debug_dir: Директория для вывода :meth:`save_debug`.
     """
 
     def __init__(
@@ -50,26 +50,26 @@ class ScreenCapture:
         screenshot_delay: float = 0.3,
         debug_dir: str | Path = "logs",
     ) -> None:
-        """Initialise ScreenCapture.
+        """Инициализация ScreenCapture.
 
         Args:
-            screenshot_delay: Pause before capturing so the UI has time to settle.
-            debug_dir: Root directory for debug screenshots written by
-                :meth:`save_debug`.
+            screenshot_delay: Пауза перед захватом, чтобы UI успел стабилизироваться.
+            debug_dir: Корневая директория для отладочных скриншотов,
+                записываемых :meth:`save_debug`.
         """
         self.screenshot_delay = screenshot_delay
         self.debug_dir = Path(debug_dir)
         self._last_image: Image.Image | None = None
 
     # ------------------------------------------------------------------
-    # Public capture API
+    # Публичный API захвата
     # ------------------------------------------------------------------
 
     def capture_full(self) -> Image.Image:
-        """Capture the entire primary screen.
+        """Захватывает весь основной экран.
 
         Returns:
-            Full-screen screenshot as a PIL Image in RGB mode.
+            Скриншот полного экрана в виде PIL-образа в режиме RGB.
         """
         self._settle()
         img = pyautogui.screenshot()
@@ -79,16 +79,16 @@ class ScreenCapture:
         return img
 
     def capture_region(self, x: int, y: int, w: int, h: int) -> Image.Image:
-        """Capture a rectangular region of the screen.
+        """Захватывает прямоугольную область экрана.
 
         Args:
-            x: Left edge in screen pixels.
-            y: Top edge in screen pixels.
-            w: Width in pixels.
-            h: Height in pixels.
+            x: Левый край в пикселях экрана.
+            y: Верхний край в пикселях экрана.
+            w: Ширина в пикселях.
+            h: Высота в пикселях.
 
         Returns:
-            Cropped screenshot as a PIL Image in RGB mode.
+            Обрезанный скриншот в виде PIL-образа в режиме RGB.
         """
         self._settle()
         img = pyautogui.screenshot(region=(x, y, w, h))
@@ -98,20 +98,20 @@ class ScreenCapture:
         return img
 
     def capture_window(self, title: str) -> Image.Image:
-        """Capture the window whose title contains *title*.
+        """Захватывает окно, заголовок которого содержит *title*.
 
-        Performs a case-insensitive partial-title match and activates the
-        window before capturing.
+        Выполняет регистронезависимый поиск по части заголовка и
+        активирует окно перед захватом.
 
         Args:
-            title: Partial or full window title (case-insensitive).
+            title: Часть или полный заголовок окна (без учёта регистра).
 
         Returns:
-            Window screenshot as a PIL Image in RGB mode.
+            Скриншот окна в виде PIL-образа в режиме RGB.
 
         Raises:
-            ValueError: If no window matching *title* is found.
-            RuntimeError: If the required platform library is unavailable.
+            ValueError: Если окно с заголовком *title* не найдено.
+            RuntimeError: Если необходимая платформенная библиотека недоступна.
         """
         system = platform.system()
         if system == "Windows":
@@ -122,27 +122,27 @@ class ScreenCapture:
             return self._capture_window_linux(title)
 
     # ------------------------------------------------------------------
-    # Last-image cache
+    # Кэш последнего изображения
     # ------------------------------------------------------------------
 
     @property
     def last_image(self) -> Image.Image | None:
-        """Most recently captured image, or None if no capture has been made."""
+        """Последний захваченный образ или None, если захвата ещё не было."""
         return self._last_image
 
     # ------------------------------------------------------------------
-    # Debug helpers
+    # Отладочные вспомогательные методы
     # ------------------------------------------------------------------
 
     def save_debug(self, image: Image.Image, step_name: str) -> Path:
-        """Save *image* to the debug directory with a sanitised filename.
+        """Сохраняет *image* в директорию отладки с очищенным именем файла.
 
         Args:
-            image: PIL Image to persist.
-            step_name: Human-readable label used as the filename stem.
+            image: PIL-образ для сохранения.
+            step_name: Читаемая метка, используемая как имя файла.
 
         Returns:
-            Absolute path of the written file.
+            Абсолютный путь к записанному файлу.
         """
         self.debug_dir.mkdir(parents=True, exist_ok=True)
         safe_name = step_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
@@ -152,12 +152,12 @@ class ScreenCapture:
         return path.resolve()
 
     # ------------------------------------------------------------------
-    # Platform-specific window capture
+    # Платформозависимый захват окна
     # ------------------------------------------------------------------
 
     def _capture_window_windows(self, title: str) -> Image.Image:
         try:
-            import pygetwindow as gw  # installed as part of pyautogui on Windows
+            import pygetwindow as gw  # устанавливается автоматически с pyautogui на Windows
         except ImportError as exc:
             raise RuntimeError(
                 "pygetwindow is required for window capture on Windows. "
@@ -173,7 +173,7 @@ class ScreenCapture:
             win.activate()
             time.sleep(0.2)
         except Exception:
-            pass  # activation failure is non-fatal; capture whatever is visible
+            pass  # неудача активации некритична; захватываем то, что видно
 
         x, y, w, h = win.left, win.top, win.width, win.height
         self._settle()
@@ -252,7 +252,7 @@ class ScreenCapture:
         return self.capture_region(geom["X"], geom["Y"], geom["WIDTH"], geom["HEIGHT"])
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Внутренние вспомогательные методы
     # ------------------------------------------------------------------
 
     def _settle(self) -> None:
@@ -261,62 +261,62 @@ class ScreenCapture:
 
 
 # ---------------------------------------------------------------------------
-# Module-level convenience functions (backward compatible)
+# Модульные функции-обёртки (обратная совместимость)
 # ---------------------------------------------------------------------------
 
 _default_capture = ScreenCapture(screenshot_delay=0.0)
 
 
 def capture_screen(delay: float = 0.0) -> Image.Image:
-    """Capture the entire primary screen.
+    """Захватывает весь основной экран.
 
     Args:
-        delay: Optional pause in seconds before capturing.
+        delay: Опциональная пауза в секундах перед захватом.
 
     Returns:
-        Full-screen screenshot as a PIL Image in RGB mode.
+        Скриншот полного экрана в виде PIL-образа в режиме RGB.
     """
     _default_capture.screenshot_delay = delay
     return _default_capture.capture_full()
 
 
 def capture_region(bbox: BBox, delay: float = 0.0) -> Image.Image:
-    """Capture a rectangular region of the screen.
+    """Захватывает прямоугольную область экрана.
 
     Args:
-        bbox: Screen region to capture (x, y, w, h in screen pixels).
-        delay: Optional pause before capturing.
+        bbox: Область экрана для захвата (x, y, w, h в пикселях экрана).
+        delay: Опциональная пауза перед захватом.
 
     Returns:
-        Cropped screenshot as a PIL Image in RGB mode.
+        Обрезанный скриншот в виде PIL-образа в режиме RGB.
     """
     _default_capture.screenshot_delay = delay
     return _default_capture.capture_region(bbox.x, bbox.y, bbox.w, bbox.h)
 
 
 def capture_window(title: str, delay: float = 0.0) -> Image.Image:
-    """Capture the window with the given title.
+    """Захватывает окно с заданным заголовком.
 
     Args:
-        title: Partial or full window title string (case-insensitive).
-        delay: Optional pause before capturing.
+        title: Часть или полный заголовок окна (без учёта регистра).
+        delay: Опциональная пауза перед захватом.
 
     Returns:
-        Window screenshot as a PIL Image in RGB mode.
+        Скриншот окна в виде PIL-образа в режиме RGB.
 
     Raises:
-        ValueError: If no window matching *title* is found.
+        ValueError: Если окно с заголовком *title* не найдено.
     """
     _default_capture.screenshot_delay = delay
     return _default_capture.capture_window(title)
 
 
 def list_windows() -> list[WindowInfo]:
-    """Return metadata for all visible top-level windows.
+    """Возвращает метаданные всех видимых окон верхнего уровня.
 
     Returns:
-        List of :class:`WindowInfo`. On unsupported platforms returns an
-        empty list rather than raising.
+        Список :class:`WindowInfo`. На неподдерживаемых платформах возвращает
+        пустой список вместо исключения.
     """
     system = platform.system()
     if system == "Windows":
@@ -335,15 +335,15 @@ def list_windows() -> list[WindowInfo]:
 
 
 def save_image(image: Image.Image, path: Path | str, quality: int = 95) -> Path:
-    """Save a PIL image to disk in PNG or JPEG format.
+    """Сохраняет PIL-образ на диск в формате PNG или JPEG.
 
     Args:
-        image: Image to save.
-        path: Destination file path. Extension determines format.
-        quality: JPEG quality (1–95); ignored for PNG.
+        image: Образ для сохранения.
+        path: Путь к файлу назначения. Расширение определяет формат.
+        quality: Качество JPEG (1–95); игнорируется для PNG.
 
     Returns:
-        Absolute resolved path of the saved file.
+        Абсолютный разрешённый путь к сохранённому файлу.
     """
     path = Path(path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,22 +1,21 @@
-"""Pattern learner — analyses execution logs and suggests improvements.
+"""Анализатор паттернов — исследует журналы выполнения и предлагает улучшения.
 
-Two complementary capabilities are provided:
+Предоставляются две взаимодополняющие возможности:
 
-**Online learning** (:meth:`PatternLearner.observe`)
-    Called by the engine after each successful OCR match.  When the same
-    observed text is seen :attr:`~PatternLearner.min_observations` times for
-    the same canonical label, it is automatically promoted to the synonym
-    registry.
+**Онлайн-обучение** (:meth:`PatternLearner.observe`)
+    Вызывается движком после каждого успешного OCR-совпадения. Когда один
+    и тот же наблюдаемый текст встречается :attr:`~PatternLearner.min_observations`
+    раз для одной канонической метки, он автоматически добавляется в реестр синонимов.
 
-**Offline log analysis** (:meth:`PatternLearner.analyze_logs`)
-    Reads all ``steps.jsonl`` files under a log directory and produces a
-    :class:`LearningReport` containing:
+**Офлайн-анализ логов** (:meth:`PatternLearner.analyze_logs`)
+    Читает все файлы ``steps.jsonl`` в директории логов и создаёт
+    :class:`LearningReport`, содержащий:
 
-    * Which steps fail most often (and why).
-    * OCR mismatches — candidates for new synonym entries.
-    * Average execution time per step (for timeout optimisation).
-    * Method-level success/failure statistics.
-    * Suggested timeout values (p95 × 1.2).
+    * Какие шаги чаще всего завершаются неудачей (и почему).
+    * OCR-несоответствия — кандидаты для новых записей синонимов.
+    * Среднее время выполнения каждого шага (для оптимизации таймаутов).
+    * Статистику успеха/неудач по методам vision.
+    * Рекомендуемые значения таймаутов (p95 × 1.2).
 """
 
 from __future__ import annotations
@@ -37,21 +36,21 @@ logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Report data types
+# Типы данных отчёта
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class StepStats:
-    """Aggregated execution statistics for a single step ID.
+    """Агрегированная статистика выполнения для одного идентификатора шага.
 
     Attributes:
-        count: Total number of executions observed.
-        success_count: Successful executions.
-        failure_count: Failed executions.
-        durations_ms: All observed execution durations in milliseconds.
-        errors: Error messages from failed executions (deduplicated).
-        methods: Counts per vision method used.
+        count: Общее количество наблюдённых выполнений.
+        success_count: Успешные выполнения.
+        failure_count: Неудачные выполнения.
+        durations_ms: Все наблюдённые длительности выполнения в миллисекундах.
+        errors: Сообщения об ошибках из неудачных выполнений (дедуплицированные).
+        methods: Количество использований каждого метода vision.
     """
 
     count: int = 0
@@ -64,13 +63,13 @@ class StepStats:
 
 @dataclass
 class OcrMismatch:
-    """Records an OCR reading that differed from the expected label.
+    """Фиксирует OCR-считывание, отличающееся от ожидаемой метки.
 
     Attributes:
-        find_target: The text that was searched for.
-        found_text: The actual text OCR returned.
-        step_id: Step where this mismatch was observed.
-        count: Number of times this exact pair was observed.
+        find_target: Текст, по которому выполнялся поиск.
+        found_text: Фактический текст, возвращённый OCR.
+        step_id: Шаг, в котором наблюдалось данное несоответствие.
+        count: Количество наблюдений данной конкретной пары.
     """
 
     find_target: str
@@ -81,15 +80,15 @@ class OcrMismatch:
 
 @dataclass
 class LearningReport:
-    """Summary produced by :meth:`PatternLearner.analyze_logs`.
+    """Сводка, созданная методом :meth:`PatternLearner.analyze_logs`.
 
     Attributes:
-        run_count: Number of distinct scenario runs analysed.
-        total_steps: Total step executions across all runs.
-        step_stats: Per-step aggregated statistics.
-        ocr_mismatches: OCR readings that differed from the search target.
-        method_stats: Per-method success/failure counts.
-        suggested_timeouts: Recommended timeout values (ms) per step.
+        run_count: Количество проанализированных отдельных запусков сценария.
+        total_steps: Общее количество выполнений шагов по всем запускам.
+        step_stats: Агрегированная статистика по каждому шагу.
+        ocr_mismatches: OCR-считывания, отличавшиеся от целевого текста поиска.
+        method_stats: Счётчики успеха/неудачи по каждому методу.
+        suggested_timeouts: Рекомендуемые значения таймаутов (мс) по каждому шагу.
     """
 
     run_count: int
@@ -101,22 +100,22 @@ class LearningReport:
 
     @property
     def failed_step_ids(self) -> list[str]:
-        """Sorted list of step IDs that have at least one failure."""
+        """Отсортированный список идентификаторов шагов, имеющих хотя бы одну неудачу."""
         return sorted(
             sid for sid, s in self.step_stats.items() if s.failure_count > 0
         )
 
     def format_text(self) -> str:
-        """Render the report as a human-readable text summary.
+        """Сформировать отчёт в виде читаемого текстового резюме.
 
         Returns:
-            Multi-line string ready for ``click.echo()``.
+            Многострочная строка, готовая для вывода через ``click.echo()``.
         """
         lines: list[str] = []
         lines.append("=== Learning Report ===")
         lines.append(f"Runs: {self.run_count}  |  Total steps: {self.total_steps}")
 
-        # Failed steps
+        # Неудавшиеся шаги
         failed = self.failed_step_ids
         if failed:
             lines.append(f"\n--- Failed Steps ({len(failed)}) ---")
@@ -131,7 +130,7 @@ class LearningReport:
         else:
             lines.append("\n  No failed steps.")
 
-        # OCR mismatches
+        # OCR-несоответствия
         if self.ocr_mismatches:
             lines.append(
                 f"\n--- OCR Mismatches — synonym candidates "
@@ -143,7 +142,7 @@ class LearningReport:
                     f"({m.count}× in step '{m.step_id}')"
                 )
 
-        # Method stats
+        # Статистика по методам
         if self.method_stats:
             lines.append("\n--- Method Effectiveness ---")
             for method, stats in sorted(self.method_stats.items()):
@@ -152,7 +151,7 @@ class LearningReport:
                 pct = ok / total * 100 if total else 0
                 lines.append(f"  {method}: {ok}/{total} ({pct:.0f}% success)")
 
-        # Timeout suggestions
+        # Предложения по таймаутам
         if self.suggested_timeouts:
             lines.append("\n--- Timeout Suggestions (p95 × 1.2) ---")
             for sid, ms in sorted(self.suggested_timeouts.items()):
@@ -177,16 +176,16 @@ _EMPTY_REPORT = LearningReport(
 
 
 class PatternLearner:
-    """Observes successful matches and proposes new synonym expansions.
+    """Наблюдает успешные совпадения и предлагает новые расширения синонимов.
 
-    Also performs offline log analysis via :meth:`analyze_logs`.
+    Также выполняет офлайн-анализ логов через :meth:`analyze_logs`.
 
     Attributes:
-        registry: :class:`~screenwalker.matching.synonyms.SynonymRegistry`
-            updated with learned patterns.
-        min_observations: Times a pattern must be seen before automatic
-            promotion.
-        evidence_path: Optional path to persist observation counts.
+        registry: :class:`~screenwalker.matching.synonyms.SynonymRegistry`,
+            пополняемый выученными паттернами.
+        min_observations: Количество наблюдений паттерна, необходимое для
+            автоматического продвижения.
+        evidence_path: Опциональный путь для сохранения счётчиков наблюдений.
     """
 
     def __init__(
@@ -195,12 +194,12 @@ class PatternLearner:
         min_observations: int = 3,
         evidence_path: Path | str | None = None,
     ) -> None:
-        """Initialise PatternLearner.
+        """Инициализировать PatternLearner.
 
         Args:
-            registry: Synonym registry to expand with learned patterns.
-            min_observations: Evidence threshold for automatic promotion.
-            evidence_path: YAML file to persist observation counts across runs.
+            registry: Реестр синонимов для расширения выученными паттернами.
+            min_observations: Порог доказательств для автоматического продвижения.
+            evidence_path: YAML-файл для сохранения счётчиков наблюдений между запусками.
         """
         self.registry = registry
         self.min_observations = min_observations
@@ -212,18 +211,18 @@ class PatternLearner:
         self._last_report: LearningReport = _EMPTY_REPORT
 
     # ------------------------------------------------------------------
-    # Online learning
+    # Онлайн-обучение
     # ------------------------------------------------------------------
 
     def observe(self, canonical_label: str, observed_text: str) -> None:
-        """Record that *observed_text* was matched to *canonical_label*.
+        """Зафиксировать, что *observed_text* был сопоставлен с *canonical_label*.
 
-        If the observation count reaches :attr:`min_observations`, the text
-        is automatically added to the synonym registry.
+        Если счётчик наблюдений достигает :attr:`min_observations`, текст
+        автоматически добавляется в реестр синонимов.
 
         Args:
-            canonical_label: The element label the match was resolved to.
-            observed_text: The raw OCR text that was matched.
+            canonical_label: Метка элемента, к которой было разрешено совпадение.
+            observed_text: Необработанный OCR-текст, который был сопоставлен.
         """
         norm_text = observed_text.lower().strip()
         norm_label = canonical_label.lower().strip()
@@ -245,11 +244,11 @@ class PatternLearner:
             self._promote(norm_label, norm_text)
 
     def _promote(self, canonical_label: str, observed_text: str) -> None:
-        """Add *observed_text* to the synonym registry.
+        """Добавить *observed_text* в реестр синонимов.
 
         Args:
-            canonical_label: Canonical element label.
-            observed_text: Text to add as a synonym.
+            canonical_label: Каноническая метка элемента.
+            observed_text: Текст для добавления в качестве синонима.
         """
         logger.info(
             "promoting_synonym",
@@ -259,11 +258,11 @@ class PatternLearner:
         self.registry.add_group(canonical_label, [observed_text])
 
     def pending_proposals(self) -> dict[str, list[tuple[str, int]]]:
-        """Return observed patterns that have not yet reached the threshold.
+        """Вернуть наблюдённые паттерны, ещё не достигшие порога.
 
         Returns:
-            Mapping of ``canonical_label`` → ``[(text, count)]`` sorted by
-            count descending, for patterns still below the threshold.
+            Словарь ``canonical_label`` → ``[(text, count)]``, отсортированный
+            по убыванию счётчика, для паттернов ниже порога.
         """
         proposals: dict[str, list[tuple[str, int]]] = {}
         for label, texts in self._observations.items():
@@ -278,20 +277,20 @@ class PatternLearner:
         return proposals
 
     # ------------------------------------------------------------------
-    # Offline log analysis
+    # Офлайн-анализ логов
     # ------------------------------------------------------------------
 
     def analyze_logs(self, log_dir: Path | str) -> LearningReport:
-        """Analyse all ``steps.jsonl`` files under *log_dir*.
+        """Проанализировать все файлы ``steps.jsonl`` в директории *log_dir*.
 
-        Searches for files matching ``*/steps.jsonl`` (one level deep) and
-        ``steps.jsonl`` at the root of *log_dir*.
+        Ищет файлы по маске ``*/steps.jsonl`` (один уровень вложенности) и
+        ``steps.jsonl`` в корне *log_dir*.
 
         Args:
-            log_dir: Root directory that contains per-run sub-directories.
+            log_dir: Корневая директория, содержащая поддиректории отдельных запусков.
 
         Returns:
-            :class:`LearningReport` aggregating all observed executions.
+            :class:`LearningReport` с агрегированными данными всех наблюдённых выполнений.
         """
         log_dir = Path(log_dir)
 
@@ -331,7 +330,7 @@ class PatternLearner:
                 except json.JSONDecodeError:
                     continue
 
-                # Skip scenario boundary events
+                # Пропускаем граничные события сценария
                 if entry.get("type") in ("scenario_start", "scenario_end"):
                     continue
 
@@ -345,7 +344,7 @@ class PatternLearner:
 
                 total_steps += 1
 
-                # Accumulate step stats
+                # Накапливаем статистику шагов
                 if step_id not in step_stats:
                     step_stats[step_id] = StepStats()
                 ss = step_stats[step_id]
@@ -359,12 +358,12 @@ class PatternLearner:
                         ss.errors.append(error)
                 ss.methods[method] = ss.methods.get(method, 0) + 1
 
-                # Method-level stats
+                # Статистика по методам
                 if method not in method_stats:
                     method_stats[method] = {"success": 0, "failure": 0}
                 method_stats[method]["success" if success else "failure"] += 1
 
-                # OCR mismatch detection
+                # Обнаружение OCR-несоответствий
                 if (
                     find_target
                     and found_text
@@ -374,7 +373,7 @@ class PatternLearner:
                     mismatch_counts[mk] = mismatch_counts.get(mk, 0) + 1
                     mismatch_step[mk] = step_id
 
-        # Build mismatch list sorted by frequency
+        # Строим список несоответствий, отсортированный по частоте
         ocr_mismatches: list[OcrMismatch] = [
             OcrMismatch(
                 find_target=key[0],
@@ -385,12 +384,12 @@ class PatternLearner:
             for key, cnt in sorted(mismatch_counts.items(), key=lambda x: x[1], reverse=True)
         ]
 
-        # Feed mismatches into online learner
+        # Передаём несоответствия в онлайн-обучение
         for m in ocr_mismatches:
             for _ in range(m.count):
                 self.observe(m.find_target, m.found_text)
 
-        # Suggested timeouts: p95 × 1.2 for steps with ≥ 3 data points
+        # Рекомендуемые таймауты: p95 × 1.2 для шагов с ≥ 3 точками данных
         suggested_timeouts: dict[str, int] = {}
         for sid, ss in step_stats.items():
             if len(ss.durations_ms) >= 3:
@@ -414,17 +413,17 @@ class PatternLearner:
         return self._last_report
 
     # ------------------------------------------------------------------
-    # Derived suggestions
+    # Производные предложения
     # ------------------------------------------------------------------
 
     def suggest_synonyms(self) -> dict[str, list[str]]:
-        """Return synonym candidates derived from observations.
+        """Вернуть кандидатов в синонимы, полученных из наблюдений.
 
-        Each key is a find_target / canonical label; values are OCR readings
-        that were matched but are not yet in the synonym registry.
+        Каждый ключ — это find_target / каноническая метка; значения — OCR-считывания,
+        которые были сопоставлены, но ещё не добавлены в реестр синонимов.
 
         Returns:
-            Mapping of label → list of candidate synonym strings.
+            Словарь метка → список строк-кандидатов в синонимы.
         """
         proposals: dict[str, list[str]] = {}
         for label, texts in self._observations.items():
@@ -438,23 +437,23 @@ class PatternLearner:
         return proposals
 
     def optimize_timeouts(self) -> dict[str, int]:
-        """Return timeout suggestions from the most recent :meth:`analyze_logs`.
+        """Вернуть предложения по таймаутам из последнего вызова :meth:`analyze_logs`.
 
         Returns:
-            Mapping of step_id → suggested timeout in milliseconds
-            (p95 of observed durations × 1.2).  Empty if no logs have been
-            analysed.
+            Словарь step_id → рекомендуемый таймаут в миллисекундах
+            (p95 наблюдённых длительностей × 1.2). Пустой, если логи
+            ещё не анализировались.
         """
         return dict(self._last_report.suggested_timeouts)
 
     # ------------------------------------------------------------------
-    # Evidence persistence
+    # Сохранение доказательств
     # ------------------------------------------------------------------
 
     def save_evidence(self) -> None:
-        """Persist observation counts to :attr:`evidence_path`.
+        """Сохранить счётчики наблюдений в :attr:`evidence_path`.
 
-        No-op if :attr:`evidence_path` is ``None``.
+        Не выполняет никаких действий, если :attr:`evidence_path` равно ``None``.
         """
         if not self.evidence_path:
             return
@@ -465,9 +464,9 @@ class PatternLearner:
         logger.debug("Evidence saved", path=str(self.evidence_path))
 
     def load_evidence(self) -> None:
-        """Load persisted observation counts from :attr:`evidence_path`.
+        """Загрузить сохранённые счётчики наблюдений из :attr:`evidence_path`.
 
-        No-op if the file does not exist.
+        Не выполняет никаких действий, если файл не существует.
         """
         if not self.evidence_path or not self.evidence_path.exists():
             return
@@ -484,19 +483,19 @@ class PatternLearner:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Вспомогательные функции
 # ---------------------------------------------------------------------------
 
 
 def _percentile(values: list[float], pct: int) -> float:
-    """Return the *pct*-th percentile of *values* (nearest-rank method).
+    """Вернуть *pct*-й перцентиль значений *values* (метод ближайшего ранга).
 
     Args:
-        values: Non-empty list of numeric values.
-        pct: Percentile in ``[0, 100]``.
+        values: Непустой список числовых значений.
+        pct: Перцентиль в диапазоне ``[0, 100]``.
 
     Returns:
-        Percentile value.
+        Значение перцентиля.
     """
     if not values:
         return 0.0

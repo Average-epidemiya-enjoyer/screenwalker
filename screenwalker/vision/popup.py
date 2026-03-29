@@ -1,11 +1,11 @@
-"""Popup detection and automatic dismissal.
+"""Обнаружение и автоматическое закрытие всплывающих окон.
 
-:class:`PopupHandler` maintains a registry of known popup patterns loaded from
-a YAML config file.  Before each step the engine calls
-:meth:`PopupHandler.detect_and_handle` to dismiss any overlay dialogs so
-they do not block the main automation flow.
+:class:`PopupHandler` ведёт реестр известных паттернов popup-окон, загружаемых из
+YAML-файла конфигурации.  Перед каждым шагом движок вызывает
+:meth:`PopupHandler.detect_and_handle` для закрытия любых диалогов-оверлеев,
+чтобы они не блокировали основной поток автоматизации.
 
-Example config (``config/popups.yaml``)::
+Пример конфигурации (``config/popups.yaml``)::
 
     popups:
       - id: error_dialog
@@ -35,28 +35,29 @@ log = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Модель данных
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class PopupDefinition:
-    """Describes a popup pattern the handler can detect and dismiss.
+    """Описывает паттерн popup-окна, которое обработчик умеет обнаруживать и закрывать.
 
     Attributes:
-        id: Unique identifier used in log messages.
-        indicators: OCR text strings that signal the popup is visible.
-            Confidence = matched_count / total_indicators.
-        templates: Optional template image names for additional visual matching.
-            Each matched template adds +0.3 to confidence (capped at 1.0).
-        action: Dismissal strategy — ``"click_button"`` | ``"wait"`` | ``"close"``.
-        button_text: Ordered list of button labels to try clicking
-            (``click_button`` action).
-        wait_timeout: Maximum seconds to wait (``wait`` action).
-        wait_until_gone: If True, poll until the popup is no longer detected.
-        priority: Popups are checked in descending priority order.
-        confidence_threshold: Minimum fraction of indicators that must match
-            for the popup to be considered detected.
+        id: Уникальный идентификатор, используемый в сообщениях лога.
+        indicators: OCR-строки, сигнализирующие о том, что popup видим.
+            Уверенность = количество_совпавших / всего_индикаторов.
+        templates: Необязательные имена шаблонных изображений для дополнительного
+            визуального сопоставления.  Каждый совпавший шаблон добавляет +0.3
+            к уверенности (максимум 1.0).
+        action: Стратегия закрытия — ``"click_button"`` | ``"wait"`` | ``"close"``.
+        button_text: Упорядоченный список надписей кнопок для клика
+            (действие ``click_button``).
+        wait_timeout: Максимальное время ожидания в секундах (действие ``wait``).
+        wait_until_gone: Если True, опрашивать экран до тех пор, пока popup не исчезнет.
+        priority: Popup-окна проверяются в порядке убывания приоритета.
+        confidence_threshold: Минимальная доля совпавших индикаторов, при которой
+            popup считается обнаруженным.
     """
 
     id: str
@@ -72,12 +73,12 @@ class PopupDefinition:
 
 @dataclass(frozen=True)
 class PopupMatch:
-    """Result of a successful popup detection.
+    """Результат успешного обнаружения popup-окна.
 
     Attributes:
-        definition: The matching popup definition.
-        confidence: Detection confidence in ``[0.0, 1.0]``.
-        matched_texts: Indicator texts that were found on screen.
+        definition: Совпавшее определение popup.
+        confidence: Уверенность обнаружения в диапазоне ``[0.0, 1.0]``.
+        matched_texts: Тексты-индикаторы, найденные на экране.
     """
 
     definition: PopupDefinition
@@ -91,10 +92,11 @@ class PopupMatch:
 
 
 class PopupHandler:
-    """Detects and dismisses popup dialogs before step execution.
+    """Обнаруживает и закрывает диалоговые popup-окна перед выполнением шага.
 
     Attributes:
-        definitions: Sorted list of popup definitions (highest priority first).
+        definitions: Отсортированный список определений popup-окон (сначала
+            наивысший приоритет).
     """
 
     def __init__(
@@ -104,14 +106,14 @@ class PopupHandler:
         mouse: Any,
         template_matcher: Any = None,
     ) -> None:
-        """Initialise with a list of popup definitions.
+        """Инициализировать со списком определений popup-окон.
 
         Args:
-            definitions: Popup patterns to watch for.
-            ocr_engine: OCR engine instance (must implement ``recognize`` and
+            definitions: Паттерны popup-окон для отслеживания.
+            ocr_engine: Экземпляр OCR-движка (должен реализовывать ``recognize`` и
                 ``find_text``).
-            mouse: Mouse controller (must implement ``click(x, y)``).
-            template_matcher: Optional template matcher instance.
+            mouse: Контроллер мыши (должен реализовывать ``click(x, y)``).
+            template_matcher: Необязательный экземпляр template-поисковика.
         """
         self.definitions: list[PopupDefinition] = sorted(
             definitions, key=lambda d: d.priority, reverse=True
@@ -121,7 +123,7 @@ class PopupHandler:
         self._matcher = template_matcher
 
     # ------------------------------------------------------------------
-    # Factory
+    # Фабрика
     # ------------------------------------------------------------------
 
     @classmethod
@@ -132,19 +134,19 @@ class PopupHandler:
         mouse: Any,
         template_matcher: Any = None,
     ) -> "PopupHandler":
-        """Load popup definitions from a YAML file.
+        """Загрузить определения popup-окон из YAML-файла.
 
         Args:
-            path: Path to a YAML file with a top-level ``popups:`` list.
-            ocr_engine: OCR engine instance.
-            mouse: Mouse controller instance.
-            template_matcher: Optional template matcher.
+            path: Путь к YAML-файлу с корневым списком ``popups:``.
+            ocr_engine: Экземпляр OCR-движка.
+            mouse: Экземпляр контроллера мыши.
+            template_matcher: Необязательный template-поисковик.
 
         Returns:
-            Configured :class:`PopupHandler`.
+            Настроенный :class:`PopupHandler`.
 
         Raises:
-            FileNotFoundError: If *path* does not exist.
+            FileNotFoundError: Если *path* не существует.
         """
         path = Path(path)
         if not path.exists():
@@ -175,22 +177,22 @@ class PopupHandler:
         return cls(definitions, ocr_engine, mouse, template_matcher)
 
     # ------------------------------------------------------------------
-    # Public API
+    # Публичный API
     # ------------------------------------------------------------------
 
     def detect(self, screenshot: Image.Image) -> PopupMatch | None:
-        """Detect whether any known popup is currently visible.
+        """Определить, виден ли на экране какой-либо известный popup.
 
-        Definitions are checked in descending priority order.  The first
-        definition whose confidence meets :attr:`~PopupDefinition.confidence_threshold`
-        is returned.
+        Определения проверяются в порядке убывания приоритета.  Возвращается
+        первое определение, чья уверенность достигает
+        :attr:`~PopupDefinition.confidence_threshold`.
 
         Args:
-            screenshot: Current screen image.
+            screenshot: Текущее изображение экрана.
 
         Returns:
-            :class:`PopupMatch` for the best match, or ``None`` if no popup is
-            detected.
+            :class:`PopupMatch` для лучшего совпадения или ``None``, если popup
+            не обнаружен.
         """
         ocr_texts = self._ocr_texts(screenshot)
 
@@ -217,16 +219,16 @@ class PopupHandler:
         match: PopupMatch,
         capture_fn: Callable[[], Image.Image] | None = None,
     ) -> bool:
-        """Dismiss a detected popup.
+        """Закрыть обнаруженный popup.
 
         Args:
-            screenshot: Current screen image (used for button location).
-            match: Popup match returned by :meth:`detect`.
-            capture_fn: Optional callable that returns a fresh screenshot.
-                Required for ``wait_until_gone`` behaviour.
+            screenshot: Текущее изображение экрана (используется для поиска кнопки).
+            match: Результат совпадения popup, возвращённый методом :meth:`detect`.
+            capture_fn: Необязательный вызываемый объект, возвращающий свежий
+                скриншот.  Требуется для поведения ``wait_until_gone``.
 
         Returns:
-            ``True`` if the popup was successfully dismissed.
+            ``True`` если popup был успешно закрыт.
         """
         defn = match.definition
         log.info("popup_handler.handling", popup_id=defn.id, action=defn.action)
@@ -246,16 +248,15 @@ class PopupHandler:
         screenshot: Image.Image,
         capture_fn: Callable[[], Image.Image] | None = None,
     ) -> bool:
-        """Detect and dismiss a popup in a single call.
+        """Обнаружить и закрыть popup за один вызов.
 
         Args:
-            screenshot: Current screen image.
-            capture_fn: Optional callable for fresh screenshots (needed by the
-                ``wait_until_gone`` strategy).
+            screenshot: Текущее изображение экрана.
+            capture_fn: Необязательный вызываемый объект для получения свежих
+                скриншотов (нужен стратегии ``wait_until_gone``).
 
         Returns:
-            ``True`` if a popup was found and handled, ``False`` if the screen
-            is clear.
+            ``True`` если popup был найден и обработан, ``False`` если экран чист.
         """
         match = self.detect(screenshot)
         if match is None:
@@ -263,11 +264,11 @@ class PopupHandler:
         return self.handle(screenshot, match, capture_fn=capture_fn)
 
     # ------------------------------------------------------------------
-    # Dismissal strategies
+    # Стратегии закрытия
     # ------------------------------------------------------------------
 
     def _handle_click_button(self, screenshot: Image.Image, defn: PopupDefinition) -> bool:
-        """Find and click the first available button text."""
+        """Найти и кликнуть по первой доступной кнопке из списка."""
         if self._ocr is None:
             log.warning("popup_handler.no_ocr_engine")
             return False
@@ -292,7 +293,7 @@ class PopupHandler:
         return False
 
     def _handle_close(self) -> bool:
-        """Press Escape to dismiss the popup."""
+        """Нажать Escape для закрытия popup."""
         try:
             import pyautogui
             pyautogui.press("escape")
@@ -307,9 +308,9 @@ class PopupHandler:
         defn: PopupDefinition,
         capture_fn: Callable[[], Image.Image] | None,
     ) -> bool:
-        """Wait for the popup to disappear or the timeout to expire."""
+        """Ждать исчезновения popup или истечения таймаута."""
         if not defn.wait_until_gone or capture_fn is None:
-            # Simple time-based wait
+            # Простое ожидание по времени
             time.sleep(min(defn.wait_timeout, 5.0))
             return True
 
@@ -329,18 +330,18 @@ class PopupHandler:
         return False
 
     # ------------------------------------------------------------------
-    # Scoring helpers
+    # Вспомогательные методы для подсчёта уверенности
     # ------------------------------------------------------------------
 
     def _ocr_texts(self, screenshot: Image.Image) -> list[str]:
-        """Run OCR and return a flat list of recognised strings."""
+        """Запустить OCR и вернуть плоский список распознанных строк."""
         if self._ocr is None:
             return []
         try:
             results = self._ocr.recognize(screenshot)
             words = [r.text for r in results if r.text.strip()]
             if words:
-                words.append(" ".join(words))  # full concatenation for phrase matching
+                words.append(" ".join(words))  # полная конкатенация для поиска фраз
             return words
         except Exception:
             return []
@@ -351,7 +352,7 @@ class PopupHandler:
         screenshot: Image.Image,
         ocr_texts: list[str],
     ) -> tuple[float, list[str]]:
-        """Score *defn* against the current screen content.
+        """Оценить *defn* относительно текущего содержимого экрана.
 
         Returns:
             ``(confidence, matched_indicators)``
@@ -375,7 +376,7 @@ class PopupHandler:
         else:
             base_confidence = len(matched) / len(defn.indicators)
 
-        # Template-matching boost
+        # Бонус за совпадение шаблона
         if self._matcher is not None and defn.templates:
             for tmpl in defn.templates:
                 try:

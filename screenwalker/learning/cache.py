@@ -1,11 +1,11 @@
-"""Action cache — persists successful element locations for fast reuse.
+"""Кэш действий — сохраняет успешно найденные местоположения элементов для быстрого повторного использования.
 
-On a cache hit the engine can skip the expensive vision pipeline and go
-straight to the action using stored screen coordinates.
+При попадании в кэш движок может пропустить дорогостоящий vision-конвейер и
+сразу перейти к действию, используя сохранённые экранные координаты.
 
-Cache key: ``"{screen_id}::{element_label}"``
+Ключ кэша: ``"{screen_id}::{element_label}"``
 
-Cache file format (JSON)::
+Формат файла кэша (JSON)::
 
     {
       "screen:main_menu/find:text:Создать заявку": {
@@ -21,11 +21,11 @@ Cache file format (JSON)::
       }
     }
 
-Resolution change detection
-----------------------------
-When the cache is first loaded, the stored ``screen_resolution`` is compared
-against the current display resolution.  If they differ, the entire cache is
-invalidated to prevent stale bounding-box coordinates from causing mis-clicks.
+Обнаружение изменения разрешения экрана
+----------------------------------------
+При первой загрузке кэша сохранённое ``screen_resolution`` сравнивается
+с текущим разрешением дисплея.  Если они отличаются, весь кэш инвалидируется,
+чтобы устаревшие координаты BBox не вызывали промахи при кликах.
 """
 
 from __future__ import annotations
@@ -51,21 +51,21 @@ logger = structlog.get_logger(__name__)
 
 @dataclass
 class CacheEntry:
-    """A single cached element location.
+    """Единичная запись кэша с местоположением элемента.
 
     Attributes:
-        screen_id: Screen state where the element was found.
-        element_label: Canonical label / search text for the element.
-        bbox_x: Bounding box left edge (pixels).
-        bbox_y: Bounding box top edge (pixels).
-        bbox_w: Bounding box width (pixels).
-        bbox_h: Bounding box height (pixels).
-        method: Vision method that produced this result.
-        confidence: Confidence score at time of caching.
-        timestamp: Unix timestamp when the entry was written.
-        hit_count: Number of times this entry has been successfully reused.
-        last_used: ISO-8601 UTC timestamp of the last cache hit.
-        screen_resolution: Display resolution ``[width, height]`` at cache time.
+        screen_id: Состояние экрана, на котором был найден элемент.
+        element_label: Каноническая метка / поисковый текст элемента.
+        bbox_x: Левый край BBox (пиксели).
+        bbox_y: Верхний край BBox (пиксели).
+        bbox_w: Ширина BBox (пиксели).
+        bbox_h: Высота BBox (пиксели).
+        method: Vision-метод, давший этот результат.
+        confidence: Оценка уверенности на момент кэширования.
+        timestamp: Unix-временная метка записи.
+        hit_count: Количество успешных повторных использований этой записи.
+        last_used: ISO-8601 UTC-метка последнего попадания в кэш.
+        screen_resolution: Разрешение дисплея ``[ширина, высота]`` на момент кэширования.
     """
 
     screen_id: str
@@ -83,14 +83,14 @@ class CacheEntry:
 
     @property
     def bbox(self) -> BBox:
-        """Reconstruct the :class:`~screenwalker.vision.screen_state.BBox`."""
+        """Восстановить :class:`~screenwalker.vision.screen_state.BBox`."""
         return BBox(self.bbox_x, self.bbox_y, self.bbox_w, self.bbox_h)
 
     def to_find_result(self) -> FindResult:
-        """Convert to a :class:`~screenwalker.vision.screen_state.FindResult`.
+        """Преобразовать в :class:`~screenwalker.vision.screen_state.FindResult`.
 
         Returns:
-            FindResult equivalent of this cache entry.
+            FindResult, эквивалентный данной записи кэша.
         """
         return FindResult(
             element=self.element_label,
@@ -104,10 +104,10 @@ class CacheEntry:
         )
 
     def is_fresh(self, ttl: float) -> bool:
-        """Return ``True`` if the entry is within the TTL window.
+        """Вернуть ``True``, если запись находится в пределах окна TTL.
 
         Args:
-            ttl: Maximum age in seconds.
+            ttl: Максимальный возраст в секундах.
         """
         return (time.time() - self.timestamp) < ttl
 
@@ -118,16 +118,16 @@ class CacheEntry:
 
 
 class ActionCache:
-    """JSON-backed persistent cache for element locations.
+    """Персистентный кэш местоположений элементов на основе JSON-файла.
 
-    The cache file is read lazily on first access and flushed to disk after
-    every write.  If the display resolution changes between runs, the whole
-    cache is invalidated.
+    Файл кэша читается лениво при первом обращении и сбрасывается на диск после
+    каждой записи.  Если разрешение дисплея изменилось между запусками,
+    весь кэш инвалидируется.
 
     Attributes:
-        path: Path to the JSON cache file.
-        ttl: Maximum age of a cache entry in seconds (default 24 h).
-        enabled: When ``False``, all operations are no-ops.
+        path: Путь к JSON-файлу кэша.
+        ttl: Максимальный возраст записи кэша в секундах (по умолчанию 24 ч).
+        enabled: При значении ``False`` все операции становятся заглушками.
     """
 
     def __init__(
@@ -136,12 +136,12 @@ class ActionCache:
         ttl: float = 86400.0,
         enabled: bool = True,
     ) -> None:
-        """Initialise ActionCache.
+        """Инициализировать ActionCache.
 
         Args:
-            path: Path to the backing JSON file.
-            ttl: Entry time-to-live in seconds.
-            enabled: Set to ``False`` to bypass the cache entirely.
+            path: Путь к резервному JSON-файлу.
+            ttl: Время жизни записи в секундах.
+            enabled: Установить ``False`` для полного обхода кэша.
         """
         self.path = Path(path)
         self.ttl = ttl
@@ -150,14 +150,14 @@ class ActionCache:
         self._current_resolution: list[int] = []
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Внутренние вспомогательные методы
     # ------------------------------------------------------------------
 
     @staticmethod
     def _get_resolution() -> list[int]:
-        """Return the current display resolution as ``[width, height]``.
+        """Вернуть текущее разрешение дисплея в виде ``[ширина, высота]``.
 
-        Returns an empty list when PyAutoGUI is unavailable (tests, CI).
+        Возвращает пустой список, если PyAutoGUI недоступен (тесты, CI).
         """
         try:
             import pyautogui
@@ -167,19 +167,19 @@ class ActionCache:
             return []
 
     def _key(self, screen_id: str, element_label: str) -> str:
-        """Build the composite cache key.
+        """Построить составной ключ кэша.
 
         Args:
-            screen_id: Screen state identifier.
-            element_label: Element label (normalised to lowercase).
+            screen_id: Идентификатор состояния экрана.
+            element_label: Метка элемента (нормализуется до нижнего регистра).
 
         Returns:
-            Composite key string.
+            Строка составного ключа.
         """
         return f"{screen_id}::{element_label.lower().strip()}"
 
     def _ensure_loaded(self) -> None:
-        """Lazily load the cache file; invalidate if resolution changed."""
+        """Лениво загрузить файл кэша; инвалидировать при изменении разрешения."""
         if self._store is not None:
             return
 
@@ -198,7 +198,7 @@ class ActionCache:
             self._store = {}
             return
 
-        # Resolution check — compare against the first entry that has one
+        # Проверка разрешения — сравниваем с первой записью, у которой оно есть
         stored_res: list[int] = []
         for v in raw.values():
             if isinstance(v, dict):
@@ -242,22 +242,22 @@ class ActionCache:
         logger.debug("Cache loaded", entries=len(self._store), path=str(self.path))
 
     # ------------------------------------------------------------------
-    # New-style interface: get / put
+    # Новый интерфейс: get / put
     # ------------------------------------------------------------------
 
     def get(self, screen_id: str, find_target: str) -> CacheEntry | None:
-        """Return a fresh :class:`CacheEntry` or ``None``.
+        """Вернуть свежую :class:`CacheEntry` или ``None``.
 
-        Increments :attr:`CacheEntry.hit_count` and updates
-        :attr:`CacheEntry.last_used` on a hit.  Evicts stale entries.
+        При попадании увеличивает :attr:`CacheEntry.hit_count` и обновляет
+        :attr:`CacheEntry.last_used`.  Устаревшие записи вытесняются.
 
         Args:
-            screen_id: Current screen state identifier.
-            find_target: The element label to look up.
+            screen_id: Идентификатор текущего состояния экрана.
+            find_target: Метка элемента для поиска.
 
         Returns:
-            :class:`CacheEntry` if the entry exists and is still fresh,
-            otherwise ``None``.
+            :class:`CacheEntry`, если запись существует и ещё свежая,
+            иначе ``None``.
         """
         if not self.enabled:
             return None
@@ -286,17 +286,17 @@ class ActionCache:
         method: str,
         confidence: float,
     ) -> None:
-        """Store an element location in the cache.
+        """Сохранить местоположение элемента в кэше.
 
-        Preserves the existing :attr:`CacheEntry.hit_count` if an entry
-        for the same key already exists.
+        Сохраняет существующий :attr:`CacheEntry.hit_count`, если запись
+        для этого ключа уже существует.
 
         Args:
-            screen_id: Current screen state identifier.
-            find_target: The element label / search text.
-            bbox: Bounding box ``(x, y, w, h)`` in screen coordinates.
-            method: Vision method (``ocr``, ``template``, ``yolo``).
-            confidence: Match confidence in ``[0.0, 1.0]``.
+            screen_id: Идентификатор текущего состояния экрана.
+            find_target: Метка / поисковый текст элемента.
+            bbox: BBox ``(x, y, w, h)`` в экранных координатах.
+            method: Vision-метод (``ocr``, ``template``, ``yolo``).
+            confidence: Уверенность совпадения в диапазоне ``[0.0, 1.0]``.
         """
         if not self.enabled:
             return
@@ -324,32 +324,32 @@ class ActionCache:
         self.flush()
 
     # ------------------------------------------------------------------
-    # Backward-compatible interface: lookup / store
+    # Интерфейс обратной совместимости: lookup / store
     # ------------------------------------------------------------------
 
     def lookup(self, screen_id: str, element_label: str) -> FindResult | None:
-        """Return a cached :class:`FindResult` or ``None`` (backward compat).
+        """Вернуть кэшированный :class:`FindResult` или ``None`` (обратная совместимость).
 
-        Delegates to :meth:`get` and converts to :class:`FindResult`.
+        Делегирует вызов :meth:`get` и преобразует результат в :class:`FindResult`.
 
         Args:
-            screen_id: Current screen state identifier.
-            element_label: Element being searched.
+            screen_id: Идентификатор текущего состояния экрана.
+            element_label: Искомый элемент.
 
         Returns:
-            :class:`~screenwalker.vision.screen_state.FindResult` or ``None``.
+            :class:`~screenwalker.vision.screen_state.FindResult` или ``None``.
         """
         entry = self.get(screen_id, element_label)
         return entry.to_find_result() if entry is not None else None
 
     def store(self, screen_id: str, result: FindResult) -> None:
-        """Persist a :class:`FindResult` to the cache (backward compat).
+        """Сохранить :class:`FindResult` в кэше (обратная совместимость).
 
-        Delegates to :meth:`put`.
+        Делегирует вызов :meth:`put`.
 
         Args:
-            screen_id: Current screen state identifier.
-            result: The :class:`FindResult` to cache.
+            screen_id: Идентификатор текущего состояния экрана.
+            result: Экземпляр :class:`FindResult` для кэширования.
         """
         self.put(
             screen_id=screen_id,
@@ -360,16 +360,16 @@ class ActionCache:
         )
 
     # ------------------------------------------------------------------
-    # Invalidation / maintenance
+    # Инвалидация / обслуживание
     # ------------------------------------------------------------------
 
     def invalidate(self, screen_id: str, element_label: str | None = None) -> None:
-        """Remove one or all entries for a screen.
+        """Удалить одну или все записи для заданного экрана.
 
         Args:
-            screen_id: Screen state to invalidate.
-            element_label: If given, invalidate only this element; otherwise
-                invalidate all entries for *screen_id*.
+            screen_id: Состояние экрана для инвалидации.
+            element_label: Если задан, инвалидировать только этот элемент;
+                иначе инвалидировать все записи для *screen_id*.
         """
         self._ensure_loaded()
         assert self._store is not None
@@ -381,7 +381,7 @@ class ActionCache:
                 del self._store[k]
 
     def flush(self) -> None:
-        """Write the in-memory store to the JSON cache file."""
+        """Записать хранилище из памяти в JSON-файл кэша."""
         if self._store is None:
             return
         try:
@@ -397,10 +397,10 @@ class ActionCache:
             logger.warning("Cache flush failed", error=str(exc))
 
     def evict_stale(self) -> int:
-        """Remove all entries older than :attr:`ttl`.
+        """Удалить все записи старше :attr:`ttl`.
 
         Returns:
-            Number of entries evicted.
+            Количество вытесненных записей.
         """
         self._ensure_loaded()
         assert self._store is not None

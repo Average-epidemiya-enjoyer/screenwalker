@@ -1,14 +1,14 @@
-"""OCR module with a pluggable engine abstraction.
+"""OCR-модуль с подключаемой абстракцией движка.
 
-The default engine is Tesseract (via ``pytesseract``).
-PaddleOCR is available as an optional alternative by setting
+Движок по умолчанию — Tesseract (через ``pytesseract``).
+PaddleOCR доступен как опциональная альтернатива при установке
 ``config.vision.ocr_engine = "paddleocr"``.
 
-All engines implement the :class:`OCREngine` Protocol.  Word-level OCR
-output is represented by :class:`OCRResult`; the higher-level
-:class:`~screenwalker.vision.screen_state.FindResult` is returned by the
-``find_text`` / ``find_all_text`` finders so the rest of the system stays
-engine-agnostic.
+Все движки реализуют Protocol :class:`OCREngine`. Результат OCR на уровне
+слов представлен классом :class:`OCRResult`; высокоуровневый
+:class:`~screenwalker.vision.screen_state.FindResult` возвращается методами
+``find_text`` / ``find_all_text``, чтобы остальная система оставалась
+независимой от конкретного движка.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ if TYPE_CHECKING:
     from screenwalker.utils.config import AppConfig
 
 # ---------------------------------------------------------------------------
-# Optional heavy dependencies — fail at *call* time, not at import time,
-# so the module is importable even without the binaries installed.
-# The module-level names are patchable in unit tests.
+# Опциональные тяжёлые зависимости — ошибка возникает при *вызове*, а не при
+# импорте, чтобы модуль оставался импортируемым даже без установленных бинарных
+# файлов. Имена на уровне модуля доступны для подмены в юнит-тестах.
 # ---------------------------------------------------------------------------
 try:
     import cv2
@@ -42,20 +42,20 @@ except ImportError:  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
-# OCR result type
+# Тип результата OCR
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class OCRResult:
-    """Word- or line-level OCR output.
+    """Результат OCR на уровне слова или строки.
 
     Attributes:
-        text: Recognised text string.
-        confidence: Normalised confidence score in [0.0, 1.0].
-        bbox: Bounding box of the text in image coordinates.
-        raw_data: Engine-specific metadata (Tesseract level/block/line/word,
-            PaddleOCR polygon, etc.).
+        text: Распознанная текстовая строка.
+        confidence: Нормализованный показатель уверенности в диапазоне [0.0, 1.0].
+        bbox: Ограничивающий прямоугольник текста в координатах изображения.
+        raw_data: Метаданные, специфичные для движка (уровень/блок/строка/слово Tesseract,
+            полигон PaddleOCR и т.д.).
     """
 
     text: str
@@ -65,35 +65,35 @@ class OCRResult:
 
 
 # ---------------------------------------------------------------------------
-# Protocol (structural interface)
+# Protocol (структурный интерфейс)
 # ---------------------------------------------------------------------------
 
 
 class OCREngine(Protocol):
-    """Structural protocol for OCR engine implementations."""
+    """Структурный Protocol для реализаций OCR-движка."""
 
     def recognize(
         self, image: Image.Image, lang: str = "rus+eng"
     ) -> list[OCRResult]:
-        """Run OCR on *image* and return word-level results.
+        """Запустить OCR на *image* и вернуть результаты на уровне слов.
 
         Args:
-            image: Input PIL image.
-            lang: Language hint (engine-specific format).
+            image: Входное PIL-изображение.
+            lang: Языковая подсказка (формат зависит от движка).
 
         Returns:
-            List of :class:`OCRResult` filtered by confidence threshold.
+            Список :class:`OCRResult`, отфильтрованный по порогу уверенности.
         """
         ...
 
     def extract_text(self, image: Image.Image) -> str:
-        """Extract all recognised text as a single space-joined string.
+        """Извлечь весь распознанный текст в виде единой строки, объединённой пробелами.
 
         Args:
-            image: Input PIL image.
+            image: Входное PIL-изображение.
 
         Returns:
-            Extracted text string.
+            Извлечённая текстовая строка.
         """
         ...
 
@@ -104,16 +104,16 @@ class OCREngine(Protocol):
         threshold: float = 0.70,
         region: BBox | None = None,
     ) -> FindResult | None:
-        """Locate *query* text within *image*.
+        """Найти текст *query* внутри *image*.
 
         Args:
-            image: Screenshot to search.
-            query: Text string to find.
-            threshold: Minimum fuzzy-match confidence in [0.0, 1.0].
-            region: Optional bounding box restricting the search area.
+            image: Скриншот для поиска.
+            query: Искомая текстовая строка.
+            threshold: Минимальный показатель нечёткого совпадения в диапазоне [0.0, 1.0].
+            region: Опциональный ограничивающий прямоугольник для ограничения области поиска.
 
         Returns:
-            Best :class:`FindResult` above *threshold*, or None.
+            Лучший :class:`FindResult` выше *threshold*, или None.
         """
         ...
 
@@ -124,42 +124,42 @@ class OCREngine(Protocol):
         threshold: float = 0.70,
         region: BBox | None = None,
     ) -> list[FindResult]:
-        """Find all occurrences of *query* in *image*.
+        """Найти все вхождения *query* в *image*.
 
         Args:
-            image: Screenshot to search.
-            query: Text string to find.
-            threshold: Minimum confidence.
-            region: Optional search region.
+            image: Скриншот для поиска.
+            query: Искомая текстовая строка.
+            threshold: Минимальный показатель уверенности.
+            region: Опциональная область поиска.
 
         Returns:
-            List of :class:`FindResult` sorted by confidence descending.
+            Список :class:`FindResult`, отсортированный по убыванию уверенности.
         """
         ...
 
 
 # ---------------------------------------------------------------------------
-# Tesseract engine
+# Движок Tesseract
 # ---------------------------------------------------------------------------
 
 
 class TesseractEngine:
-    """OCR engine backed by Tesseract via pytesseract.
+    """OCR-движок на основе Tesseract через pytesseract.
 
-    Pre-processing pipeline (applied when *preprocess* is True):
-    1. Convert to grayscale.
-    2. Optionally double the resolution (*resize*) for small text.
-    3. Apply ``cv2.adaptiveThreshold`` binarisation.
-    4. Optionally denoise with ``cv2.fastNlMeansDenoising`` (*denoise*).
+    Пайплайн предобработки (применяется при *preprocess* = True):
+    1. Преобразование в оттенки серого.
+    2. Опциональное удвоение разрешения (*resize*) для мелкого текста.
+    3. Бинаризация через ``cv2.adaptiveThreshold``.
+    4. Опциональное шумоподавление через ``cv2.fastNlMeansDenoising`` (*denoise*).
 
     Attributes:
-        lang: Tesseract language code(s) (e.g. ``"eng"`` or ``"eng+rus"``).
-        config: Additional Tesseract config string (e.g. ``"--psm 6"``).
-        preprocess: Apply the pre-processing pipeline before OCR.
-        confidence_threshold: Minimum Tesseract word confidence (0–100).
-            Words below this value are discarded. Default: 60.
-        resize: Double the image resolution before OCR (helps with small text).
-        denoise: Apply non-local means denoising before OCR.
+        lang: Языковой код(ы) Tesseract (например ``"eng"`` или ``"eng+rus"``).
+        config: Дополнительная строка конфигурации Tesseract (например ``"--psm 6"``).
+        preprocess: Применять пайплайн предобработки перед OCR.
+        confidence_threshold: Минимальный показатель уверенности слова Tesseract (0–100).
+            Слова ниже этого значения отбрасываются. По умолчанию: 60.
+        resize: Удвоить разрешение изображения перед OCR (помогает с мелким текстом).
+        denoise: Применить нелокальное среднее шумоподавление перед OCR.
     """
 
     def __init__(
@@ -179,20 +179,20 @@ class TesseractEngine:
         self.denoise = denoise
 
     # ------------------------------------------------------------------
-    # Pre-processing
+    # Предобработка
     # ------------------------------------------------------------------
 
     def _preprocess(self, image: Image.Image) -> Image.Image:
-        """Apply the pre-processing pipeline to *image*.
+        """Применить пайплайн предобработки к *image*.
 
         Args:
-            image: Input PIL image (any mode).
+            image: Входное PIL-изображение (любой режим).
 
         Returns:
-            Pre-processed PIL image in ``"L"`` (grayscale) mode.
+            Предобработанное PIL-изображение в режиме ``"L"`` (оттенки серого).
 
         Raises:
-            ImportError: If *opencv-python-headless* is not installed.
+            ImportError: Если *opencv-python-headless* не установлен.
         """
         if cv2 is None:
             raise ImportError(
@@ -200,18 +200,18 @@ class TesseractEngine:
                 "pip install opencv-python-headless"
             )
 
-        # Step 1 – grayscale
+        # Шаг 1 — преобразование в оттенки серого
         rgb = np.array(image.convert("RGB"))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
 
-        # Step 2 – optional ×2 resize (bicubic for quality)
+        # Шаг 2 — опциональное масштабирование ×2 (бикубическая интерполяция для качества)
         if self.resize:
             h, w = gray.shape
             gray = cv2.resize(
                 gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC
             )
 
-        # Step 3 – adaptive binarisation
+        # Шаг 3 — адаптивная бинаризация
         binary = cv2.adaptiveThreshold(
             gray,
             maxValue=255,
@@ -221,31 +221,31 @@ class TesseractEngine:
             C=2,
         )
 
-        # Step 4 – optional denoising
+        # Шаг 4 — опциональное шумоподавление
         if self.denoise:
             binary = cv2.fastNlMeansDenoising(binary, h=10)
 
         return Image.fromarray(binary)
 
     # ------------------------------------------------------------------
-    # Core recognition
+    # Основное распознавание
     # ------------------------------------------------------------------
 
     def recognize(
         self, image: Image.Image, lang: str | None = None
     ) -> list[OCRResult]:
-        """Run Tesseract on *image* and return filtered word-level results.
+        """Запустить Tesseract на *image* и вернуть отфильтрованные результаты на уровне слов.
 
         Args:
-            image: Input PIL image.
-            lang: Override engine language for this call.
+            image: Входное PIL-изображение.
+            lang: Переопределить язык движка для данного вызова.
 
         Returns:
-            List of :class:`OCRResult` with confidence >=
+            Список :class:`OCRResult` с уверенностью >=
             :attr:`confidence_threshold` / 100.
 
         Raises:
-            ImportError: If *pytesseract* is not installed.
+            ImportError: Если *pytesseract* не установлен.
         """
         if pytesseract is None:
             raise ImportError(
@@ -270,7 +270,7 @@ class TesseractEngine:
                 conf = int(data["conf"][i])
             except (ValueError, TypeError):
                 continue
-            # conf == -1 for non-word rows (block/line/paragraph headers)
+            # conf == -1 для строк, не являющихся словами (заголовки блоков/строк/абзацев)
             if not text or conf < 0 or conf < self.confidence_threshold:
                 continue
 
@@ -296,30 +296,30 @@ class TesseractEngine:
         return results
 
     # ------------------------------------------------------------------
-    # Line grouping
+    # Группировка по строкам
     # ------------------------------------------------------------------
 
     def _group_into_lines(
         self,
         results: list[OCRResult],
     ) -> list[OCRResult]:
-        """Merge word-level results into line-level results.
+        """Объединить результаты на уровне слов в результаты на уровне строк.
 
-        Two words are considered to be on the same line when the distance
-        between their vertical centres is within half the height of the
-        taller word.
+        Два слова считаются находящимися на одной строке, если расстояние
+        между вертикальными центрами не превышает половины высоты более
+        высокого из слов.
 
         Args:
-            results: Word-level :class:`OCRResult` list (from :meth:`recognize`).
+            results: Список :class:`OCRResult` на уровне слов (из :meth:`recognize`).
 
         Returns:
-            Line-level :class:`OCRResult` list sorted top-to-bottom,
-            left-to-right.
+            Список :class:`OCRResult` на уровне строк, отсортированный сверху вниз,
+            слева направо.
         """
         if not results:
             return []
 
-        # Sort by (y_center, x) so left-to-right within a line
+        # Сортировка по (y_center, x), чтобы слова шли слева направо в пределах строки
         def _cy(r: OCRResult) -> int:
             return r.bbox.y + r.bbox.h // 2
 
@@ -357,17 +357,17 @@ class TesseractEngine:
         return merged
 
     # ------------------------------------------------------------------
-    # High-level finders
+    # Высокоуровневые методы поиска
     # ------------------------------------------------------------------
 
     def extract_text(self, image: Image.Image) -> str:
-        """Extract all text from *image* as a space-joined string.
+        """Извлечь весь текст из *image* в виде строки, объединённой пробелами.
 
         Args:
-            image: Input PIL image.
+            image: Входное PIL-изображение.
 
         Returns:
-            Recognised text, words joined by spaces.
+            Распознанный текст, слова объединены пробелами.
         """
         return " ".join(r.text for r in self.recognize(image))
 
@@ -380,20 +380,20 @@ class TesseractEngine:
         fuzzy: bool = True,
         synonym_registry: Any | None = None,
     ) -> FindResult | None:
-        """Find the best-matching occurrence of *query* in *image*.
+        """Найти наилучшее вхождение *query* в *image*.
 
         Args:
-            image: Screenshot to search.
-            query: Text to find.
-            threshold: Minimum match confidence in [0.0, 1.0].
-            region: Optional bounding box restricting the search area.
-            fuzzy: Use RapidFuzz ``partial_ratio`` when True; exact
-                substring check when False.
-            synonym_registry: Optional :class:`~screenwalker.matching.SynonymRegistry`
-                used to expand *query* when the direct search finds nothing.
+            image: Скриншот для поиска.
+            query: Искомый текст.
+            threshold: Минимальный показатель совпадения в диапазоне [0.0, 1.0].
+            region: Опциональный ограничивающий прямоугольник для ограничения области поиска.
+            fuzzy: Использовать ``partial_ratio`` из RapidFuzz при True; точную
+                проверку подстроки при False.
+            synonym_registry: Опциональный :class:`~screenwalker.matching.SynonymRegistry`
+                для расширения *query* при отсутствии прямых результатов.
 
         Returns:
-            :class:`FindResult` for the best match, or None.
+            :class:`FindResult` для наилучшего совпадения, или None.
         """
         matches = self.find_all_text(
             image, query, threshold=threshold, region=region, fuzzy=fuzzy,
@@ -410,22 +410,22 @@ class TesseractEngine:
         fuzzy: bool = True,
         synonym_registry: Any | None = None,
     ) -> list[FindResult]:
-        """Find all occurrences of *query* in *image*.
+        """Найти все вхождения *query* в *image*.
 
-        When *synonym_registry* is provided and the direct search returns no
-        results, the query is expanded to all known aliases and each alias is
-        searched in turn.
+        Если *synonym_registry* указан и прямой поиск не дал результатов,
+        запрос расширяется до всех известных псевдонимов и каждый из них
+        ищется по очереди.
 
         Args:
-            image: Screenshot to search.
-            query: Text to find.
-            threshold: Minimum confidence in [0.0, 1.0].
-            region: Optional bounding box restricting the search area.
-            fuzzy: Use fuzzy matching when True.
-            synonym_registry: Optional registry for synonym expansion fallback.
+            image: Скриншот для поиска.
+            query: Искомый текст.
+            threshold: Минимальный показатель уверенности в диапазоне [0.0, 1.0].
+            region: Опциональный ограничивающий прямоугольник для ограничения области поиска.
+            fuzzy: Использовать нечёткое сопоставление при True.
+            synonym_registry: Опциональный реестр для резервного расширения синонимов.
 
         Returns:
-            List of :class:`FindResult` sorted by confidence descending.
+            Список :class:`FindResult`, отсортированный по убыванию уверенности.
         """
         search_image = image
         offset_x, offset_y = 0, 0
@@ -474,27 +474,27 @@ class TesseractEngine:
 
 
 # ---------------------------------------------------------------------------
-# PaddleOCR engine (optional)
+# Движок PaddleOCR (опциональный)
 # ---------------------------------------------------------------------------
 
 
 class PaddleOCREngine:
-    """Optional OCR engine backed by PaddleOCR.
+    """Опциональный OCR-движок на основе PaddleOCR.
 
-    Requires the ``paddleocr`` extras: ``pip install screenwalker[paddleocr]``.
+    Требует дополнительных зависимостей ``paddleocr``: ``pip install screenwalker[paddleocr]``.
 
     Attributes:
-        lang: PaddleOCR language code (e.g. ``"ru"``, ``"en"``, ``"ch"``).
+        lang: Языковой код PaddleOCR (например ``"ru"``, ``"en"``, ``"ch"``).
     """
 
     def __init__(self, lang: str = "ru") -> None:
-        """Initialise PaddleOCREngine.
+        """Инициализировать PaddleOCREngine.
 
         Args:
-            lang: PaddleOCR language code.
+            lang: Языковой код PaddleOCR.
 
         Raises:
-            ImportError: If paddleocr is not installed.
+            ImportError: Если paddleocr не установлен.
         """
         try:
             from paddleocr import PaddleOCR
@@ -510,20 +510,20 @@ class PaddleOCREngine:
     def recognize(
         self, image: Image.Image, lang: str | None = None
     ) -> list[OCRResult]:
-        """Run PaddleOCR on *image*.
+        """Запустить PaddleOCR на *image*.
 
         Args:
-            image: Input PIL image.
-            lang: Ignored — PaddleOCR language is set at construction time.
+            image: Входное PIL-изображение.
+            lang: Игнорируется — язык PaddleOCR задаётся при создании объекта.
 
         Returns:
-            List of :class:`OCRResult` one per detected text box.
+            Список :class:`OCRResult`, по одному на каждый обнаруженный текстовый блок.
         """
         img_array = np.array(image.convert("RGB"))
         raw = self._ocr.ocr(img_array, cls=True)
 
         results: list[OCRResult] = []
-        # raw is [[line, ...]] where line = [box_points, (text, confidence)]
+        # raw имеет вид [[строка, ...]], где строка = [точки_рамки, (текст, уверенность)]
         page = raw[0] if raw else []
         for item in page:
             box, (text, conf) = item
@@ -544,7 +544,7 @@ class PaddleOCREngine:
         return results
 
     def extract_text(self, image: Image.Image) -> str:
-        """Extract all text from *image* as a space-joined string."""
+        """Извлечь весь текст из *image* в виде строки, объединённой пробелами."""
         return " ".join(r.text for r in self.recognize(image))
 
     def find_text(
@@ -556,7 +556,7 @@ class PaddleOCREngine:
         fuzzy: bool = True,
         synonym_registry: Any | None = None,
     ) -> FindResult | None:
-        """Find the best-matching occurrence of *query* in *image*."""
+        """Найти наилучшее вхождение *query* в *image*."""
         matches = self.find_all_text(
             image, query, threshold=threshold, region=region, fuzzy=fuzzy,
             synonym_registry=synonym_registry,
@@ -572,7 +572,7 @@ class PaddleOCREngine:
         fuzzy: bool = True,
         synonym_registry: Any | None = None,
     ) -> list[FindResult]:
-        """Find all occurrences of *query* in *image*."""
+        """Найти все вхождения *query* в *image*."""
         search_image = image
         offset_x, offset_y = 0, 0
         if region is not None:
@@ -619,21 +619,21 @@ class PaddleOCREngine:
 
 
 # ---------------------------------------------------------------------------
-# Factories
+# Фабрики
 # ---------------------------------------------------------------------------
 
 
 def create_ocr_engine(config: AppConfig) -> OCREngine:
-    """Create an OCR engine from :class:`~screenwalker.utils.config.AppConfig`.
+    """Создать OCR-движок из :class:`~screenwalker.utils.config.AppConfig`.
 
     Args:
-        config: Application configuration.
+        config: Конфигурация приложения.
 
     Returns:
-        Configured :class:`OCREngine` instance.
+        Настроенный экземпляр :class:`OCREngine`.
 
     Raises:
-        ValueError: If ``config.vision.ocr_engine`` is not recognised.
+        ValueError: Если ``config.vision.ocr_engine`` не распознан.
     """
     name = config.vision.ocr_engine
     if name == "tesseract":
@@ -650,20 +650,20 @@ def create_ocr_engine(config: AppConfig) -> OCREngine:
 
 
 def build_ocr_engine(engine_name: str = "tesseract", **kwargs: object) -> OCREngine:
-    """Factory that creates an OCR engine by name.
+    """Фабрика для создания OCR-движка по имени.
 
-    This is the low-level factory; prefer :func:`create_ocr_engine` when you
-    have an :class:`~screenwalker.utils.config.AppConfig` available.
+    Это низкоуровневая фабрика; предпочтительно использовать :func:`create_ocr_engine`,
+    если доступен :class:`~screenwalker.utils.config.AppConfig`.
 
     Args:
-        engine_name: Engine identifier — ``"tesseract"`` or ``"paddleocr"``.
-        **kwargs: Forwarded to the engine constructor.
+        engine_name: Идентификатор движка — ``"tesseract"`` или ``"paddleocr"``.
+        **kwargs: Передаются в конструктор движка.
 
     Returns:
-        An :class:`OCREngine`-compatible engine instance.
+        Экземпляр движка, совместимый с :class:`OCREngine`.
 
     Raises:
-        ValueError: If *engine_name* is not recognised.
+        ValueError: Если *engine_name* не распознан.
     """
     engines = {
         "tesseract": TesseractEngine,

@@ -1,13 +1,13 @@
-"""Synonym / alias dictionary for UI element labels.
+"""Словарь синонимов / псевдонимов для меток элементов UI.
 
-Two complementary classes are provided:
+Предоставляются два взаимодополняющих класса:
 
-* :class:`SynonymRegistry` — the original registry with canonical → alias
-  resolution.  Used throughout the vision pipeline.
+* :class:`SynonymRegistry` — оригинальный реестр с разрешением canonical → alias.
+  Используется повсеместно в пайплайне vision.
 
-* :class:`SynonymDictionary` — higher-level class designed for YAML-driven
-  configuration.  Wraps a ``SynonymRegistry`` and adds fuzzy group resolution,
-  online synonym addition, and round-trip YAML persistence.
+* :class:`SynonymDictionary` — высокоуровневый класс, ориентированный на
+  YAML-конфигурацию. Оборачивает ``SynonymRegistry`` и добавляет нечёткое
+  разрешение групп, добавление синонимов в режиме онлайн и round-trip YAML-персистентность.
 
 Example:
     >>> reg = SynonymRegistry()
@@ -33,7 +33,7 @@ import yaml
 
 
 # ---------------------------------------------------------------------------
-# Built-in synonym groups covering common UI patterns
+# Встроенные группы синонимов для распространённых паттернов UI
 # ---------------------------------------------------------------------------
 
 _DEFAULT_SYNONYMS: dict[str, list[str]] = {
@@ -57,23 +57,23 @@ _DEFAULT_SYNONYMS: dict[str, list[str]] = {
 
 
 # ---------------------------------------------------------------------------
-# SynonymRegistry — original low-level registry
+# SynonymRegistry — оригинальный низкоуровневый реестр
 # ---------------------------------------------------------------------------
 
 
 class SynonymRegistry:
-    """Registry mapping canonical UI labels to synonym sets.
+    """Реестр, отображающий канонические метки UI на наборы синонимов.
 
     Attributes:
-        _canonical_to_aliases: Maps canonical label → set of all aliases.
-        _alias_to_canonical: Reverse map for fast resolution.
+        _canonical_to_aliases: Отображает каноническую метку → множество всех псевдонимов.
+        _alias_to_canonical: Обратное отображение для быстрого разрешения.
     """
 
     def __init__(self, load_defaults: bool = True) -> None:
-        """Initialize SynonymRegistry.
+        """Инициализировать SynonymRegistry.
 
         Args:
-            load_defaults: Pre-load the built-in :data:`_DEFAULT_SYNONYMS`.
+            load_defaults: Предварительно загрузить встроенные :data:`_DEFAULT_SYNONYMS`.
         """
         self._canonical_to_aliases: dict[str, set[str]] = {}
         self._alias_to_canonical: dict[str, str] = {}
@@ -83,13 +83,13 @@ class SynonymRegistry:
                 self.add_group(canonical, aliases)
 
     def add_group(self, canonical: str, aliases: list[str]) -> None:
-        """Register a group of synonyms under a canonical name.
+        """Зарегистрировать группу синонимов под каноническим именем.
 
-        Aliases are normalised to lowercase and stripped before storage.
+        Псевдонимы нормализуются до нижнего регистра и очищаются от пробелов перед сохранением.
 
         Args:
-            canonical: The primary label used internally.
-            aliases: All forms that should resolve to *canonical*.
+            canonical: Основная метка, используемая внутри системы.
+            aliases: Все формы, которые должны разрешаться в *canonical*.
         """
         norm_canonical = canonical.lower().strip()
         self._canonical_to_aliases.setdefault(norm_canonical, set())
@@ -99,38 +99,39 @@ class SynonymRegistry:
             self._alias_to_canonical[norm] = norm_canonical
 
     def resolve(self, text: str) -> str | None:
-        """Resolve *text* to its canonical label.
+        """Разрешить *text* в его каноническую метку.
 
         Args:
-            text: Raw string (e.g. from OCR output or YAML).
+            text: Необработанная строка (например, из OCR-вывода или YAML).
 
         Returns:
-            Canonical label if *text* (normalised) is a known alias, else None.
+            Каноническая метка, если *text* (нормализованный) является известным
+            псевдонимом, иначе None.
         """
         return self._alias_to_canonical.get(text.lower().strip())
 
     def expand(self, canonical: str) -> set[str]:
-        """Return all known aliases for a canonical label.
+        """Вернуть все известные псевдонимы для канонической метки.
 
         Args:
-            canonical: Canonical label to expand.
+            canonical: Каноническая метка для расширения.
 
         Returns:
-            Set of all alias strings (including the canonical itself),
-            or an empty set if *canonical* is not registered.
+            Множество всех строк-псевдонимов (включая саму каноническую),
+            или пустое множество, если *canonical* не зарегистрирован.
         """
         return self._canonical_to_aliases.get(canonical.lower().strip(), set())
 
     def all_aliases(self, text: str) -> set[str]:
-        """Return all synonyms for the canonical label that *text* maps to.
+        """Вернуть все синонимы канонической метки, на которую отображается *text*.
 
-        Convenience wrapper: resolve then expand.
+        Удобная обёртка: resolve, затем expand.
 
         Args:
-            text: Any known alias or canonical label.
+            text: Любой известный псевдоним или каноническая метка.
 
         Returns:
-            Full synonym set, or a set containing just *text* if unknown.
+            Полное множество синонимов, или множество, содержащее только *text*, если он неизвестен.
         """
         canonical = self.resolve(text)
         if canonical:
@@ -138,9 +139,9 @@ class SynonymRegistry:
         return {text.lower().strip()}
 
     def load_from_yaml(self, path: Path | str) -> None:
-        """Merge additional synonyms from a YAML file.
+        """Добавить дополнительные синонимы из YAML-файла.
 
-        File format::
+        Формат файла::
 
             ok:
               - ok
@@ -151,11 +152,11 @@ class SynonymRegistry:
               - Place Order
 
         Args:
-            path: Path to the YAML synonyms file.
+            path: Путь к YAML-файлу синонимов.
 
         Raises:
-            FileNotFoundError: If *path* does not exist.
-            ValueError: If the YAML structure is invalid.
+            FileNotFoundError: Если *path* не существует.
+            ValueError: Если структура YAML невалидна.
         """
         path = Path(path)
         if not path.exists():
@@ -170,10 +171,10 @@ class SynonymRegistry:
             self.add_group(str(canonical), [str(a) for a in aliases])
 
     def save_to_yaml(self, path: Path | str) -> None:
-        """Persist the current registry to a YAML file.
+        """Сохранить текущий реестр в YAML-файл.
 
         Args:
-            path: Destination file path.
+            path: Путь к файлу назначения.
         """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -183,21 +184,21 @@ class SynonymRegistry:
 
 
 # ---------------------------------------------------------------------------
-# SynonymDictionary — higher-level YAML-first API
+# SynonymDictionary — высокоуровневый YAML-ориентированный API
 # ---------------------------------------------------------------------------
 
 
 class SynonymDictionary:
-    """YAML-driven synonym dictionary with fuzzy group resolution.
+    """YAML-ориентированный словарь синонимов с нечётким разрешением групп.
 
-    Wraps a :class:`SynonymRegistry` and adds:
+    Оборачивает :class:`SynonymRegistry` и добавляет:
 
-    * :meth:`resolve` — returns the full list of synonyms for *text*.
-    * :meth:`find_group` — fuzzy-matches *text* to the closest synonym group.
-    * :meth:`add_synonym` — adds a new alias at runtime (useful for learning).
-    * :meth:`save` — persists changes back to the source YAML file.
+    * :meth:`resolve` — возвращает полный список синонимов для *text*.
+    * :meth:`find_group` — нечётко сопоставляет *text* с ближайшей группой синонимов.
+    * :meth:`add_synonym` — добавляет новый псевдоним во время выполнения (полезно для обучения).
+    * :meth:`save` — сохраняет изменения обратно в исходный YAML-файл.
 
-    YAML format (``synonyms:`` top-level key)::
+    Формат YAML (ключ верхнего уровня ``synonyms:``)::
 
         synonyms:
           close:
@@ -210,19 +211,19 @@ class SynonymDictionary:
             - save
             - apply
 
-    The ``synonyms:`` wrapper key is optional — a bare mapping is also accepted
-    (compatible with :meth:`SynonymRegistry.load_from_yaml`).
+    Ключ-обёртка ``synonyms:`` является необязательным — принимается и простое
+    отображение (совместимо с :meth:`SynonymRegistry.load_from_yaml`).
 
     Args:
-        dict_path: Path to a YAML synonyms file.  When ``None`` the dictionary
-            starts empty.
+        dict_path: Путь к YAML-файлу синонимов. При значении ``None`` словарь
+            начинает пустым.
     """
 
     def __init__(self, dict_path: Path | str | None = None) -> None:
-        """Initialize SynonymDictionary.
+        """Инициализировать SynonymDictionary.
 
         Args:
-            dict_path: Optional path to a YAML synonyms file to load.
+            dict_path: Опциональный путь к YAML-файлу синонимов для загрузки.
         """
         self._registry = SynonymRegistry(load_defaults=False)
         self._dict_path: Path | None = Path(dict_path) if dict_path else None
@@ -230,14 +231,14 @@ class SynonymDictionary:
             self._load(self._dict_path)
 
     # ------------------------------------------------------------------
-    # Loading / saving
+    # Загрузка / сохранение
     # ------------------------------------------------------------------
 
     def _load(self, path: Path) -> None:
-        """Load synonyms from *path*, supporting both YAML formats.
+        """Загрузить синонимы из *path*, поддерживая оба формата YAML.
 
         Args:
-            path: YAML file to read.
+            path: YAML-файл для чтения.
         """
         with path.open("r", encoding="utf-8") as fh:
             raw: Any = yaml.safe_load(fh)
@@ -245,7 +246,7 @@ class SynonymDictionary:
         if not isinstance(raw, dict):
             raise ValueError(f"Synonyms YAML must be a top-level mapping: {path}")
 
-        # Support `synonyms:` wrapper key
+        # Поддержка ключа-обёртки `synonyms:`
         if "synonyms" in raw and isinstance(raw["synonyms"], dict):
             groups = raw["synonyms"]
         else:
@@ -256,10 +257,10 @@ class SynonymDictionary:
                 self._registry.add_group(str(group_name), [str(a) for a in aliases])
 
     def save(self) -> None:
-        """Persist the current dictionary to :attr:`dict_path`.
+        """Сохранить текущий словарь в :attr:`dict_path`.
 
         Raises:
-            RuntimeError: If no *dict_path* was provided at construction time.
+            RuntimeError: Если *dict_path* не был указан при создании экземпляра.
         """
         if self._dict_path is None:
             raise RuntimeError("No dict_path set — provide a path to save to")
@@ -274,43 +275,42 @@ class SynonymDictionary:
             yaml.safe_dump(data, fh, allow_unicode=True, default_flow_style=False)
 
     # ------------------------------------------------------------------
-    # Public API
+    # Публичный API
     # ------------------------------------------------------------------
 
     def resolve(self, text: str) -> list[str]:
-        """Return all known synonyms for *text*, sorted alphabetically.
+        """Вернуть все известные синонимы для *text*, отсортированные по алфавиту.
 
-        If *text* belongs to a synonym group, the entire group is returned.
-        Otherwise ``[text.lower().strip()]`` is returned (singleton).
+        Если *text* принадлежит группе синонимов, возвращается вся группа.
+        Иначе возвращается ``[text.lower().strip()]`` (одноэлементный список).
 
         Args:
-            text: Any known alias or raw OCR text.
+            text: Любой известный псевдоним или необработанный OCR-текст.
 
         Returns:
-            Sorted list of synonym strings.
+            Отсортированный список строк-синонимов.
         """
         return sorted(self._registry.all_aliases(text))
 
     def find_group(self, text: str, fuzzy_threshold: int = 80) -> str | None:
-        """Find which synonym group *text* belongs to, using fuzzy matching.
+        """Найти, к какой группе синонимов принадлежит *text*, используя нечёткое сопоставление.
 
-        Performs a fuzzy search over *all* aliases across all groups and
-        returns the canonical group name of the best match above
-        *fuzzy_threshold*.
+        Выполняет нечёткий поиск по *всем* псевдонимам всех групп и возвращает
+        каноническое имя группы с наилучшим совпадением выше *fuzzy_threshold*.
 
         Args:
-            text: Text to classify (e.g. an OCR result).
-            fuzzy_threshold: Minimum ``token_sort_ratio`` score 0–100.
+            text: Текст для классификации (например, результат OCR).
+            fuzzy_threshold: Минимальная оценка ``token_sort_ratio`` 0–100.
 
         Returns:
-            Canonical group name, or ``None`` if no group matches well enough.
+            Каноническое имя группы, или ``None``, если ни одна группа не совпала достаточно хорошо.
         """
-        # Fast path — exact (case-insensitive) lookup
+        # Быстрый путь — точный поиск (без учёта регистра)
         exact = self._registry.resolve(text)
         if exact is not None:
             return exact
 
-        # Fuzzy path — compare against all aliases across all groups
+        # Нечёткий путь — сравнение со всеми псевдонимами всех групп
         from rapidfuzz import fuzz as _rfuzz
 
         norm_text = text.lower().strip()
@@ -329,26 +329,26 @@ class SynonymDictionary:
         return None
 
     def add_synonym(self, group: str, new_synonym: str) -> None:
-        """Add a new alias to *group*, creating the group if necessary.
+        """Добавить новый псевдоним в *group*, создав группу при необходимости.
 
         Args:
-            group: Canonical group name (e.g. ``"close"``).
-            new_synonym: New alias string to register (e.g. ``"schließen"``).
+            group: Каноническое имя группы (например, ``"close"``).
+            new_synonym: Новая строка псевдонима для регистрации (например, ``"schließen"``).
         """
         self._registry.add_group(group, [new_synonym])
 
     def groups(self) -> list[str]:
-        """Return all registered canonical group names.
+        """Вернуть все зарегистрированные канонические имена групп.
 
         Returns:
-            Sorted list of group names.
+            Отсортированный список имён групп.
         """
         return sorted(self._registry._canonical_to_aliases.keys())
 
     def all_aliases_flat(self) -> dict[str, list[str]]:
-        """Return all groups and their aliases as a plain dict.
+        """Вернуть все группы и их псевдонимы в виде простого словаря.
 
         Returns:
-            Mapping of canonical → sorted alias list.
+            Отображение canonical → отсортированный список псевдонимов.
         """
         return {k: sorted(v) for k, v in self._registry._canonical_to_aliases.items()}

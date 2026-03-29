@@ -1,12 +1,12 @@
-"""OpenCV template matching — single-scale, multi-scale, and NMS.
+"""Сопоставление шаблонов OpenCV — одномасштабное, многомасштабное и NMS.
 
-Public API:
-- :class:`TemplateMatcher` — class-based API with template directory + caching.
+Публичный API:
+- :class:`TemplateMatcher` — классовый API с директорией шаблонов и кэшированием.
 - :func:`match_template` / :func:`match_template_all` /
-  :func:`match_template_multiscale` — standalone functions for one-off use.
-- :func:`_nms` — pure-numpy Non-Maximum Suppression (exported for testing).
-- :func:`draw_matches` — debug visualisation.
-- :func:`capture_template` — interactive region capture helper.
+  :func:`match_template_multiscale` — автономные функции для разовых вызовов.
+- :func:`_nms` — чистый numpy Non-Maximum Suppression (экспортируется для тестов).
+- :func:`draw_matches` — визуализация для отладки.
+- :func:`capture_template` — вспомогательный инструмент интерактивного захвата области.
 """
 
 from __future__ import annotations
@@ -25,47 +25,47 @@ logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Conversion helpers (kept for backward compatibility)
+# Вспомогательные функции преобразования (сохранены для обратной совместимости)
 # ---------------------------------------------------------------------------
 
 
 def _pil_to_cv(image: Image.Image) -> np.ndarray:
-    """Convert a PIL Image to an OpenCV BGR uint8 array.
+    """Преобразовать PIL Image в массив OpenCV BGR uint8.
 
     Args:
-        image: Source PIL Image (any mode).
+        image: Исходное PIL Image (любой режим).
 
     Returns:
-        OpenCV-compatible BGR uint8 ndarray of shape (H, W, 3).
+        Массив ndarray BGR uint8, совместимый с OpenCV, формы (H, W, 3).
     """
     rgb = image.convert("RGB")
     return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
 
 
 def _to_gray(bgr: np.ndarray) -> np.ndarray:
-    """Convert a BGR array to grayscale.
+    """Преобразовать массив BGR в оттенки серого.
 
     Args:
-        bgr: BGR uint8 array of shape (H, W, 3).
+        bgr: Массив BGR uint8 формы (H, W, 3).
 
     Returns:
-        Grayscale uint8 array of shape (H, W).
+        Массив в оттенках серого uint8 формы (H, W).
     """
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
 
 def _load_template(template_path: Path | str) -> np.ndarray:
-    """Load a template image from disk as a BGR uint8 array.
+    """Загрузить изображение шаблона с диска как массив BGR uint8.
 
     Args:
-        template_path: Path to the template PNG/JPEG file.
+        template_path: Путь к файлу шаблона PNG/JPEG.
 
     Returns:
-        Template image as BGR uint8 ndarray.
+        Изображение шаблона как массив ndarray BGR uint8.
 
     Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If the file cannot be decoded as an image.
+        FileNotFoundError: Если файл не существует.
+        ValueError: Если файл не удаётся декодировать как изображение.
     """
     path = Path(template_path)
     if not path.exists():
@@ -77,20 +77,20 @@ def _load_template(template_path: Path | str) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# MatchResult dataclass
+# Датакласс MatchResult
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class MatchResult:
-    """Result of a single template match.
+    """Результат одного совпадения шаблона.
 
     Attributes:
-        template_name: Name (stem) of the matched template.
-        confidence: Normalised match score in [0.0, 1.0].
-        center: Pixel coordinates of the match centre ``(x, y)``.
-        bbox: Bounding box of the match in image coordinates.
-        scale: Template scale that produced this match (1.0 = original size).
+        template_name: Имя (stem) совпавшего шаблона.
+        confidence: Нормализованный показатель совпадения в диапазоне [0.0, 1.0].
+        center: Пиксельные координаты центра совпадения ``(x, y)``.
+        bbox: Ограничивающий прямоугольник совпадения в координатах изображения.
+        scale: Масштаб шаблона, при котором получено данное совпадение (1.0 = исходный размер).
     """
 
     template_name: str
@@ -110,16 +110,16 @@ def _nms(
     scores: np.ndarray,
     iou_threshold: float = 0.5,
 ) -> list[int]:
-    """Pure-numpy Non-Maximum Suppression.
+    """Чистый numpy Non-Maximum Suppression.
 
     Args:
-        boxes: Array of shape ``(N, 4)`` with columns ``[x, y, w, h]``.
-        scores: Array of shape ``(N,)`` with confidence scores.
-        iou_threshold: Boxes whose IoU with the currently selected box
-            exceeds this value are suppressed.
+        boxes: Массив формы ``(N, 4)`` со столбцами ``[x, y, w, h]``.
+        scores: Массив формы ``(N,)`` с показателями уверенности.
+        iou_threshold: Прямоугольники, у которых IoU с текущим выбранным
+            прямоугольником превышает это значение, подавляются.
 
     Returns:
-        List of kept indices into *boxes*, sorted by score descending.
+        Список сохранённых индексов в *boxes*, отсортированных по убыванию оценки.
     """
     if len(boxes) == 0:
         return []
@@ -155,20 +155,20 @@ def _nms(
 
 
 # ---------------------------------------------------------------------------
-# TemplateMatcher class
+# Класс TemplateMatcher
 # ---------------------------------------------------------------------------
 
 
 class TemplateMatcher:
-    """Class-based template matcher with template-directory management and caching.
+    """Классовый сопоставитель шаблонов с управлением директорией шаблонов и кэшированием.
 
-    Loaded templates are cached in memory so repeated calls to
-    :meth:`find_one` / :meth:`find_all` for the same template name do not
-    re-read from disk.
+    Загруженные шаблоны кэшируются в памяти, поэтому повторные вызовы
+    :meth:`find_one` / :meth:`find_all` для одного и того же имени шаблона не
+    выполняют повторное чтение с диска.
 
     Attributes:
-        templates_dir: Root directory that contains reference PNG templates.
-        method: OpenCV matching method (default ``cv2.TM_CCOEFF_NORMED``).
+        templates_dir: Корневая директория, содержащая эталонные PNG-шаблоны.
+        method: Метод сопоставления OpenCV (по умолчанию ``cv2.TM_CCOEFF_NORMED``).
     """
 
     def __init__(
@@ -176,33 +176,33 @@ class TemplateMatcher:
         templates_dir: Path,
         method: int = cv2.TM_CCOEFF_NORMED,
     ) -> None:
-        """Initialise TemplateMatcher.
+        """Инициализировать TemplateMatcher.
 
         Args:
-            templates_dir: Directory containing ``.png`` template files.
-            method: OpenCV ``matchTemplate`` method constant.
+            templates_dir: Директория, содержащая файлы шаблонов ``.png``.
+            method: Константа метода ``matchTemplate`` OpenCV.
         """
         self.templates_dir = Path(templates_dir)
         self.method = method
         self._cache: dict[str, np.ndarray] = {}
 
     # ------------------------------------------------------------------
-    # Template loading
+    # Загрузка шаблонов
     # ------------------------------------------------------------------
 
     def load_template(self, name: str) -> np.ndarray:
-        """Load a template by name, with in-memory caching.
+        """Загрузить шаблон по имени с кэшированием в памяти.
 
-        Tries ``templates_dir/<name>`` first, then ``templates_dir/<name>.png``.
+        Сначала пробует ``templates_dir/<name>``, затем ``templates_dir/<name>.png``.
 
         Args:
-            name: Template stem (e.g. ``"ok_button"``) or full filename.
+            name: Stem шаблона (например ``"ok_button"``) или полное имя файла.
 
         Returns:
-            BGR uint8 ndarray.
+            Массив ndarray BGR uint8.
 
         Raises:
-            FileNotFoundError: If neither candidate path exists.
+            FileNotFoundError: Если ни один из кандидатов пути не существует.
         """
         if name in self._cache:
             return self._cache[name]
@@ -220,11 +220,11 @@ class TemplateMatcher:
         )
 
     def clear_cache(self) -> None:
-        """Remove all cached templates from memory."""
+        """Удалить все кэшированные шаблоны из памяти."""
         self._cache.clear()
 
     # ------------------------------------------------------------------
-    # Single-scale matching
+    # Одномасштабное сопоставление
     # ------------------------------------------------------------------
 
     def find_one(
@@ -234,16 +234,16 @@ class TemplateMatcher:
         threshold: float = 0.8,
         region: BBox | None = None,
     ) -> MatchResult | None:
-        """Find the single best match of a template in a screenshot.
+        """Найти единственное наилучшее совпадение шаблона на скриншоте.
 
         Args:
-            screenshot: Full-screen or window PIL Image.
-            template_name: Template stem to load from :attr:`templates_dir`.
-            threshold: Minimum normalised match score.
-            region: Optional bounding box to restrict the search area.
+            screenshot: PIL Image всего экрана или окна.
+            template_name: Stem шаблона для загрузки из :attr:`templates_dir`.
+            threshold: Минимальный нормализованный показатель совпадения.
+            region: Опциональный ограничивающий прямоугольник для ограничения области поиска.
 
         Returns:
-            :class:`MatchResult` for the best match, or None.
+            :class:`MatchResult` для наилучшего совпадения, или None.
         """
         tmpl = self.load_template(template_name)
         gray_screen, ox, oy = self._prepare_screen(screenshot, region)
@@ -271,19 +271,19 @@ class TemplateMatcher:
         threshold: float = 0.8,
         region: BBox | None = None,
     ) -> list[MatchResult]:
-        """Find all non-overlapping matches of a template in a screenshot.
+        """Найти все непересекающиеся совпадения шаблона на скриншоте.
 
-        Applies Non-Maximum Suppression (IoU > 0.5) to remove duplicate
-        detections from overlapping match-map peaks.
+        Применяет Non-Maximum Suppression (IoU > 0.5) для удаления дублирующих
+        обнаружений из перекрывающихся пиков карты совпадений.
 
         Args:
-            screenshot: Full-screen or window PIL Image.
-            template_name: Template stem to load.
-            threshold: Minimum match score.
-            region: Optional search region.
+            screenshot: PIL Image всего экрана или окна.
+            template_name: Stem шаблона для загрузки.
+            threshold: Минимальный показатель совпадения.
+            region: Опциональная область поиска.
 
         Returns:
-            List of :class:`MatchResult` sorted by confidence descending.
+            Список :class:`MatchResult`, отсортированный по убыванию уверенности.
         """
         tmpl = self.load_template(template_name)
         gray_screen, ox, oy = self._prepare_screen(screenshot, region)
@@ -314,7 +314,7 @@ class TemplateMatcher:
         return sorted(matches, key=lambda r: r.confidence, reverse=True)
 
     # ------------------------------------------------------------------
-    # Multi-scale matching
+    # Многомасштабное сопоставление
     # ------------------------------------------------------------------
 
     def find_one_multiscale(
@@ -325,22 +325,22 @@ class TemplateMatcher:
         threshold: float = 0.75,
         region: BBox | None = None,
     ) -> MatchResult | None:
-        """Find the best match across multiple template scales.
+        """Найти наилучшее совпадение при нескольких масштабах шаблона.
 
-        Resizes the *template* (not the screenshot) at each scale level and
-        picks the scale that gives the highest confidence above *threshold*.
-        Useful for handling DPI / resolution differences between the reference
-        screenshot and the live screen.
+        Изменяет размер *шаблона* (не скриншота) на каждом уровне масштаба и
+        выбирает масштаб, дающий наибольшую уверенность выше *threshold*.
+        Полезно для обработки различий DPI / разрешения между эталонным
+        скриншотом и живым экраном.
 
         Args:
-            screenshot: Full-screen or window PIL Image.
-            template_name: Template stem to load.
-            scales: Tuple of scale factors to try (relative to original size).
-            threshold: Minimum match score to consider a hit.
-            region: Optional search region.
+            screenshot: PIL Image всего экрана или окна.
+            template_name: Stem шаблона для загрузки.
+            scales: Кортеж масштабных коэффициентов для проверки (относительно исходного размера).
+            threshold: Минимальный показатель совпадения для признания успешным.
+            region: Опциональная область поиска.
 
         Returns:
-            :class:`MatchResult` for the best match across all scales, or None.
+            :class:`MatchResult` для наилучшего совпадения по всем масштабам, или None.
         """
         tmpl = self.load_template(template_name)
         gray_screen, ox, oy = self._prepare_screen(screenshot, region)
@@ -382,7 +382,7 @@ class TemplateMatcher:
         return best
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Внутренние вспомогательные методы
     # ------------------------------------------------------------------
 
     def _prepare_screen(
@@ -390,7 +390,7 @@ class TemplateMatcher:
         screenshot: Image.Image,
         region: BBox | None,
     ) -> tuple[np.ndarray, int, int]:
-        """Return ``(gray_array, offset_x, offset_y)``."""
+        """Вернуть ``(gray_array, offset_x, offset_y)``."""
         if region is not None:
             src = screenshot.crop(
                 (region.x, region.y, region.right, region.bottom)
@@ -407,7 +407,7 @@ class TemplateMatcher:
         gray_tmpl: np.ndarray,
         threshold: float,
     ) -> tuple[float, int, int] | None:
-        """Return ``(conf, x, y)`` for the best match, or None."""
+        """Вернуть ``(conf, x, y)`` для наилучшего совпадения, или None."""
         if (
             gray_tmpl.shape[0] > gray_screen.shape[0]
             or gray_tmpl.shape[1] > gray_screen.shape[1]
@@ -425,7 +425,7 @@ class TemplateMatcher:
         gray_tmpl: np.ndarray,
         threshold: float,
     ) -> list[tuple[float, int, int]]:
-        """Return all ``(conf, x, y)`` hits above *threshold*."""
+        """Вернуть все совпадения ``(conf, x, y)`` выше *threshold*."""
         if (
             gray_tmpl.shape[0] > gray_screen.shape[0]
             or gray_tmpl.shape[1] > gray_screen.shape[1]
@@ -437,7 +437,7 @@ class TemplateMatcher:
 
 
 # ---------------------------------------------------------------------------
-# Utility functions
+# Утилиты
 # ---------------------------------------------------------------------------
 
 
@@ -448,17 +448,17 @@ def draw_matches(
     label_color: tuple[int, int, int] = (255, 50, 50),
     line_width: int = 2,
 ) -> Image.Image:
-    """Draw bounding boxes and labels on a copy of *screenshot*.
+    """Нарисовать ограничивающие прямоугольники и метки на копии *screenshot*.
 
     Args:
-        screenshot: Source image (not modified in place).
-        matches: List of :class:`MatchResult` to draw.
-        box_color: RGB colour for the bounding-box outline.
-        label_color: RGB colour for the confidence label.
-        line_width: Outline thickness in pixels.
+        screenshot: Исходное изображение (не изменяется на месте).
+        matches: Список :class:`MatchResult` для отрисовки.
+        box_color: Цвет RGB для контура ограничивающего прямоугольника.
+        label_color: Цвет RGB для метки уверенности.
+        line_width: Толщина контура в пикселях.
 
     Returns:
-        New PIL Image with annotations.
+        Новое PIL Image с аннотациями.
     """
     img = screenshot.convert("RGB").copy()
     draw = ImageDraw.Draw(img)
@@ -479,20 +479,20 @@ def capture_template(
     region: BBox,
     templates_dir: Path | str = Path("templates"),
 ) -> Path:
-    """Capture a screen region and save it as a template PNG.
+    """Захватить область экрана и сохранить её как PNG-шаблон.
 
-    Takes a screenshot, crops it to *region*, and saves the result as
+    Делает скриншот, обрезает его до *region* и сохраняет результат как
     ``<templates_dir>/<name>.png``.
 
     Args:
-        name: Template stem (no extension).
-        region: Screen region to capture, in absolute screen coordinates.
-        templates_dir: Destination directory (created if it does not exist).
+        name: Stem шаблона (без расширения).
+        region: Область экрана для захвата в абсолютных координатах экрана.
+        templates_dir: Целевая директория (создаётся, если не существует).
 
     Returns:
-        Absolute path of the saved template file.
+        Абсолютный путь сохранённого файла шаблона.
     """
-    import pyautogui  # lazy to keep the module importable without a display
+    import pyautogui  # отложенный импорт, чтобы модуль был импортируемым без дисплея
 
     dest = Path(templates_dir)
     dest.mkdir(parents=True, exist_ok=True)
@@ -508,7 +508,7 @@ def capture_template(
 
 
 # ---------------------------------------------------------------------------
-# Standalone functions (backward-compatible, path-based API)
+# Автономные функции (обратно совместимый API на основе путей)
 # ---------------------------------------------------------------------------
 
 
@@ -519,17 +519,17 @@ def match_template(
     region: BBox | None = None,
     method: int = cv2.TM_CCOEFF_NORMED,
 ) -> FindResult | None:
-    """Single-scale template matching using OpenCV.
+    """Одномасштабное сопоставление шаблонов с использованием OpenCV.
 
     Args:
-        image: Screenshot to search.
-        template_path: Path to the reference template image.
-        threshold: Minimum normalised match score (0.0–1.0).
-        region: Optional bounding box to crop before matching.
-        method: OpenCV matching method constant.
+        image: Скриншот для поиска.
+        template_path: Путь к эталонному изображению шаблона.
+        threshold: Минимальный нормализованный показатель совпадения (0.0–1.0).
+        region: Опциональный ограничивающий прямоугольник для обрезки перед сопоставлением.
+        method: Константа метода сопоставления OpenCV.
 
     Returns:
-        :class:`FindResult` for the best match above threshold, or None.
+        :class:`FindResult` для наилучшего совпадения выше порога, или None.
     """
     path = Path(template_path)
     tmpl = _load_template(path)
@@ -572,21 +572,21 @@ def match_template_all(
     method: int = cv2.TM_CCOEFF_NORMED,
     max_results: int = 50,
 ) -> list[FindResult]:
-    """Find ALL non-overlapping occurrences of a template in an image.
+    """Найти ВСЕ непересекающиеся вхождения шаблона в изображении.
 
-    Applies Non-Maximum Suppression (IoU > 0.5) to eliminate duplicate
-    detections.
+    Применяет Non-Maximum Suppression (IoU > 0.5) для устранения дублирующих
+    обнаружений.
 
     Args:
-        image: Screenshot to search.
-        template_path: Path to the reference template image.
-        threshold: Minimum match score.
-        region: Optional search region.
-        method: OpenCV matching method constant.
-        max_results: Maximum number of results to return.
+        image: Скриншот для поиска.
+        template_path: Путь к эталонному изображению шаблона.
+        threshold: Минимальный показатель совпадения.
+        region: Опциональная область поиска.
+        method: Константа метода сопоставления OpenCV.
+        max_results: Максимальное количество возвращаемых результатов.
 
     Returns:
-        List of :class:`FindResult` sorted by confidence descending.
+        Список :class:`FindResult`, отсортированный по убыванию уверенности.
     """
     path = Path(template_path)
     tmpl = _load_template(path)
@@ -639,22 +639,22 @@ def match_template_multiscale(
     scale_steps: int = 10,
     region: BBox | None = None,
 ) -> FindResult | None:
-    """Multi-scale template matching.
+    """Многомасштабное сопоставление шаблонов.
 
-    Searches at multiple template sizes to handle zoom/DPI differences between
-    the reference screenshot and the live screen.
+    Выполняет поиск при нескольких размерах шаблона для обработки различий
+    масштаба/DPI между эталонным скриншотом и живым экраном.
 
     Args:
-        image: Screenshot to search.
-        template_path: Path to the reference template image.
-        threshold: Minimum match score.
-        scale_min: Smallest scale factor relative to original template.
-        scale_max: Largest scale factor relative to original template.
-        scale_steps: Number of evenly-spaced scale levels to try.
-        region: Optional search region.
+        image: Скриншот для поиска.
+        template_path: Путь к эталонному изображению шаблона.
+        threshold: Минимальный показатель совпадения.
+        scale_min: Наименьший масштабный коэффициент относительно исходного шаблона.
+        scale_max: Наибольший масштабный коэффициент относительно исходного шаблона.
+        scale_steps: Количество равномерно распределённых уровней масштаба для проверки.
+        region: Опциональная область поиска.
 
     Returns:
-        :class:`FindResult` for the best match across all scales, or None.
+        :class:`FindResult` для наилучшего совпадения по всем масштабам, или None.
     """
     path = Path(template_path)
     tmpl = _load_template(path)
