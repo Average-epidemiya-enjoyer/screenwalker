@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -338,6 +339,7 @@ class ScenarioEngine:
                 ``on_failure=abort`` fails.
         """
         run_start = time.monotonic()
+        started_at = datetime.now(timezone.utc)
         self._log.info("Scenario started", step_count=len(self.steps))
         self._step_logger.log_scenario_start(
             self.scenario_name, len(self.context.variables)
@@ -382,6 +384,10 @@ class ScenarioEngine:
                 len(self.context.failed_steps),
                 elapsed,
             )
+
+        # Автогенерация HTML-отчёта (если включено в конфиге)
+        if self.config.report.enabled:
+            self._generate_report(started_at, datetime.now(timezone.utc))
 
         if failure:
             raise failure
@@ -1188,6 +1194,33 @@ class ScenarioEngine:
             raise _RecoveryGoto(target_step_id)
 
         return True
+
+    # ------------------------------------------------------------------
+    # HTML-отчёт
+    # ------------------------------------------------------------------
+
+    def _generate_report(self, started_at: datetime, finished_at: datetime) -> None:
+        """Сгенерировать HTML-отчёт после завершения сценария.
+
+        Ошибки генерации не прерывают выполнение — только логируются.
+
+        Args:
+            started_at: Дата/время начала запуска.
+            finished_at: Дата/время завершения запуска.
+        """
+        try:
+            from screenwalker.reporting.html_report import RunReportGenerator, RunResult
+            run_result = RunResult.from_context(self.context, started_at, finished_at)
+            generator = RunReportGenerator(
+                thumbnail_max_width=self.config.report.thumbnail_max_width,
+                jpeg_quality=self.config.report.jpeg_quality,
+                include_screenshots=self.config.report.include_screenshots,
+            )
+            output_path = self.context.output_dir / self.config.report.output_path
+            report_path = generator.generate(run_result, output_path)
+            self._log.info("report.auto_generated", path=str(report_path))
+        except Exception as exc:
+            self._log.warning("report.generation_failed", error=str(exc))
 
     # ------------------------------------------------------------------
     # Teardown

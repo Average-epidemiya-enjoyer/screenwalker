@@ -163,6 +163,24 @@ class RetryConfig(BaseModel):
     backoff_max: float = 30.0
 
 
+class ReportConfig(BaseModel):
+    """Настройки генерации HTML-отчётов.
+
+    Attributes:
+        enabled: Автоматически создавать отчёт после каждого запуска.
+        output_path: Имя файла отчёта относительно output_dir запуска.
+        thumbnail_max_width: Максимальная ширина миниатюры скриншота (пиксели).
+        jpeg_quality: Качество JPEG для миниатюр (10–100).
+        include_screenshots: Включать ли скриншоты в отчёт.
+    """
+
+    enabled: bool = False
+    output_path: str = "report.html"
+    thumbnail_max_width: int = Field(default=400, ge=50)
+    jpeg_quality: int = Field(default=72, ge=10, le=100)
+    include_screenshots: bool = True
+
+
 class AppConfig(BaseModel):
     """Root application configuration.
 
@@ -176,6 +194,7 @@ class AppConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     learning: LearningConfig = Field(default_factory=LearningConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
+    report: ReportConfig = Field(default_factory=ReportConfig)
 
 
 # ---------------------------------------------------------------------------

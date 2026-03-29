@@ -208,6 +208,90 @@ def capture_template(
     click.echo(f"Template saved: {out_path}  ({w}x{h} px at {x},{y})")
 
 
+@main.command("report")
+@click.argument("log_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Путь к выходному HTML-файлу. По умолчанию: <log_dir>/report.html",
+)
+@click.option(
+    "--thumbnail-width",
+    type=int,
+    default=400,
+    show_default=True,
+    help="Максимальная ширина миниатюр скриншотов (пиксели).",
+)
+@click.option(
+    "--jpeg-quality",
+    type=int,
+    default=72,
+    show_default=True,
+    help="Качество JPEG для встроенных скриншотов (10–100).",
+)
+@click.option(
+    "--no-screenshots",
+    is_flag=True,
+    default=False,
+    help="Не включать скриншоты в отчёт (уменьшает размер файла).",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
+    default="warning",
+    show_default=True,
+)
+def report(
+    log_dir: Path,
+    output: Path | None,
+    thumbnail_width: int,
+    jpeg_quality: int,
+    no_screenshots: bool,
+    log_level: str,
+) -> None:
+    """Сгенерировать HTML-отчёт из директории с логами.
+
+    LOG_DIR — директория с файлом steps.jsonl и папкой screenshots/.
+
+    Пример:
+
+        python -m screenwalker report logs/2024-01-15_run/ --output report.html
+    """
+    _configure_logging(log_level)
+
+    from screenwalker.reporting.html_report import RunReportGenerator, RunResult
+
+    output_path = output or (log_dir / "report.html")
+
+    try:
+        run_result = RunResult.from_log_dir(log_dir)
+    except FileNotFoundError as exc:
+        click.echo(f"Ошибка: {exc}", err=True)
+        sys.exit(1)
+
+    generator = RunReportGenerator(
+        thumbnail_max_width=thumbnail_width,
+        jpeg_quality=jpeg_quality,
+        include_screenshots=not no_screenshots,
+    )
+
+    try:
+        report_path = generator.generate(run_result, output_path)
+    except Exception as exc:
+        click.echo(f"Ошибка генерации отчёта: {exc}", err=True)
+        sys.exit(1)
+
+    status = "PASS" if run_result.success else "FAIL"
+    click.echo(
+        f"{status}  {run_result.scenario_name} — "
+        f"{len(run_result.steps)} шагов, "
+        f"{run_result.duration_s:.1f} с"
+    )
+    click.echo(f"Отчёт сохранён: {report_path}")
+
+
 @main.command("analyze")
 @click.argument("log_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
